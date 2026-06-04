@@ -2,7 +2,7 @@
 
 ## WHAT
 
-**Stack:** .NET 8, C#, Windows x64  
+**Stack:** .NET 10, C#, Windows x64  
 **Projects:** one (Phase 1) — NutAgent service; Tray + Shared projects are planned for Phase 3
 
 ```
