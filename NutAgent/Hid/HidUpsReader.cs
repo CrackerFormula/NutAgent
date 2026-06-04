@@ -68,8 +68,8 @@ public sealed class HidUpsReader : IUpsReader
         [(0x85u << 16) | 0x4B] = UpsStatus.ReplaceBattery,
     };
 
-    private const uint AcPresentUsage    = (0x84u << 16) | 0xD1;
-    private const uint AcPresentUsageAlt = (0x84u << 16) | 0x62;
+    // 0x84/0xD1 = ACPresent (HID Power Device spec). 0x84/0x62 = "Volt" — NOT ACPresent, removed.
+    private const uint AcPresentUsage = (0x84u << 16) | 0xD1;
 
     // -------------------------------------------------------------------------
 
@@ -164,14 +164,16 @@ public sealed class HidUpsReader : IUpsReader
                 }
             }
 
-            // Poll feature reports every ~30s as fallback for devices that don't send
+            // Poll feature reports every ~10s as fallback for devices that don't send
             // spontaneous input reports on status changes (e.g. Tripp Lite).
-            if (++_pollCount % 6 == 0)
+            if (++_pollCount % 2 == 0)
                 ReadNominalValues();
 
             // Keep ups.status in Variables current after every read
             _lastState.Variables["ups.status"] = _lastState.Status.ToNutString();
             _lastState.LastUpdated = DateTime.UtcNow;
+            if (_pollCount <= 5)
+                _logger.LogInformation("Poll {Poll}: status={Status} acPresentReceived={AcPresent} charge={Charge} runtime={Runtime}", _pollCount, _lastState.Status, _acPresentReceived, _lastState.BatteryCharge, _lastState.RuntimeSeconds);
         }
         catch (Exception ex)
         {
@@ -203,26 +205,33 @@ public sealed class HidUpsReader : IUpsReader
                 else if (numMap.NutVar == "battery.runtime")
                     _lastState.RuntimeSeconds = (int)physical;
             }
-            else if (applyStatus && (usage == AcPresentUsage || usage == AcPresentUsageAlt))
+            else if (applyStatus && usage == AcPresentUsage)
             {
+                bool firstTime = !_acPresentReceived;
                 _acPresentReceived = true;
                 bool acPresent = value.GetLogicalValue() != 0;
+                if (firstTime)
+                    _logger.LogInformation("ACPresent usage 0x{Usage:X8} logical={Logical} acPresent={AcPresent}", usage, value.GetLogicalValue(), acPresent);
                 _lastState.Status = acPresent
                     ? (_lastState.Status | UpsStatus.OnLine)    & ~UpsStatus.OnBattery
                     : (_lastState.Status | UpsStatus.OnBattery) & ~UpsStatus.OnLine;
             }
             else if (applyStatus && StatusUsages.TryGetValue(usage, out var flag))
             {
-                if (value.GetLogicalValue() != 0)
+                int logical = value.GetLogicalValue();
+                if (logical != 0)
                     _lastState.Status |= flag;
                 else
                     _lastState.Status &= ~flag;
+                if (_pollCount < 5)
+                    _logger.LogInformation("HID status usage 0x{Usage:X8} flag={Flag} logical={Logical}", usage, flag, logical);
             }
         }
 
         // Derive OnLine/OnBattery from Charging/Discharging flags when no explicit ACPresent
-        // usage is received. Charging implies AC is present and takes priority — some devices
-        // set both Charging and Discharging simultaneously during the AC-restore transition.
+        // usage is received. For the Tripp Lite (and similar devices), feature reports reliably
+        // report Charging=1 on AC and Discharging=1 on battery — so these flags are trustworthy.
+        // Charging takes priority over Discharging to handle AC-restore transitions.
         if (applyStatus && !_acPresentReceived)
         {
             if (_lastState.Status.HasFlag(UpsStatus.Charging))
@@ -261,7 +270,11 @@ public sealed class HidUpsReader : IUpsReader
                 try { _stream.GetFeature(buf); }
                 catch { continue; }
 
-                try { report.Read(buf, 0, (DataValue value) => ApplyDataValue(value, applyStatus: false)); }
+                // applyStatus: true — feature reports are the authoritative status source for
+                // devices (like Tripp Lite) that don't send spontaneous input reports on state
+                // changes. Charging/Discharging flags here are reliable: Charging=1 on AC,
+                // Discharging=1 on battery.
+                try { report.Read(buf, 0, (DataValue value) => ApplyDataValue(value, applyStatus: true)); }
                 catch { }
             }
         }
