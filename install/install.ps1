@@ -35,7 +35,7 @@ $cfg = Join-Path $InstallDir "appsettings.json"
 if (-not (Test-Path $InstallDir)) { New-Item -ItemType Directory -Path $InstallDir | Out-Null }
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$sourceExe = Join-Path $scriptDir "..\NutAgent\bin\Release\net8.0-windows\win-x64\publish\ups-agent.exe"
+$sourceExe = Join-Path $scriptDir "..\NutAgent\bin\Release\net10.0-windows\win-x64\publish\ups-agent.exe"
 $sourceCfg = Join-Path $scriptDir "..\NutAgent\appsettings.json"
 
 if (-not (Test-Path $sourceExe)) {
