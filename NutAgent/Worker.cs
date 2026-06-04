@@ -28,7 +28,8 @@ public sealed class Worker : BackgroundService
     {
         _logger.LogInformation("Starting in server mode — UPS name: {UpsName}", _config.UpsName);
 
-        using var reader = new HidUpsReader(_loggerFactory.CreateLogger<HidUpsReader>());
+        using var reader   = new HidUpsReader(_loggerFactory.CreateLogger<HidUpsReader>());
+        var       shutdown = new ShutdownManager(_loggerFactory.CreateLogger<ShutdownManager>());
 
         // Written by readLoop, read by concurrent NutSession tasks — use Volatile to prevent stale reads.
         UpsState state = new UpsState();
@@ -42,8 +43,21 @@ public sealed class Worker : BackgroundService
                 Volatile.Write(ref state, newState);
 
                 if (newState.Status.IsOnBattery())
+                {
                     _logger.LogWarning("UPS on battery — charge: {Charge:F0}%  runtime: {Runtime}s",
                         newState.BatteryCharge, newState.RuntimeSeconds);
+
+                    bool chargeCritical  = newState.BatteryCharge <= _config.ShutdownBatteryThreshold;
+                    bool runtimeCritical = newState.RuntimeSeconds > 0 &&
+                                          newState.RuntimeSeconds <= _config.ShutdownRuntimeMinutes * 60;
+
+                    if (newState.Status.IsLowBattery() || chargeCritical || runtimeCritical)
+                        shutdown.ScheduleShutdown(newState.Status.IsLowBattery() ? 0 : _config.ShutdownDelaySeconds);
+                }
+                else
+                {
+                    shutdown.CancelShutdown();
+                }
 
                 await Task.Delay(TimeSpan.FromSeconds(5), ct);
             }

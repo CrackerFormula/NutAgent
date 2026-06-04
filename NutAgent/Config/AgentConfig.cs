@@ -19,6 +19,7 @@ public class AgentConfig
 
     // Shutdown policy (both modes)
     public int ShutdownBatteryThreshold { get; set; } = 20;  // trigger shutdown below this %
+    public int ShutdownRuntimeMinutes { get; set; } = 5;     // trigger shutdown below this many minutes of runtime
     public int ShutdownDelaySeconds { get; set; } = 60;       // grace period before shutdown
     public int PollIntervalSeconds { get; set; } = 30;        // client poll interval
 }

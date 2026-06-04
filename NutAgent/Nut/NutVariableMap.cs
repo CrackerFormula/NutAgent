@@ -10,13 +10,13 @@ public static class NutVariableMap
     private const string DriverName    = "NutAgent";
     private const string DriverVersion = "1.0.0";
 
-    public static IReadOnlyDictionary<string, string> Build(UpsState state, string upsDescription)
+    public static IReadOnlyDictionary<string, string> Build(UpsState state, string upsDescription, int shutdownBatteryThreshold = 20)
     {
         var vars = new Dictionary<string, string>
         {
             ["battery.charge"]            = Fmt(state.BatteryCharge, 0),
-            ["battery.charge.low"]        = "10",
-            ["battery.charge.warning"]    = "20",
+            ["battery.charge.low"]        = shutdownBatteryThreshold.ToString(),
+            ["battery.charge.warning"]    = (shutdownBatteryThreshold + 10).ToString(),
             ["battery.runtime"]           = state.RuntimeSeconds.ToString(),
             ["battery.type"]              = "PbAc",
             ["battery.voltage"]           = Fmt(state.BatteryVoltage, 2),

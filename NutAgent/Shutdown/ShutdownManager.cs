@@ -24,17 +24,21 @@ public sealed class ShutdownManager
 
             _ = Task.Run(async () =>
             {
-                if (delaySeconds > 0)
+                try
                 {
-                    _logger.LogWarning("Shutdown in {Delay}s — restore power to cancel", delaySeconds);
-                    await Task.Delay(TimeSpan.FromSeconds(delaySeconds), token);
-                }
+                    if (delaySeconds > 0)
+                    {
+                        _logger.LogWarning("Shutdown in {Delay}s — restore power to cancel", delaySeconds);
+                        await Task.Delay(TimeSpan.FromSeconds(delaySeconds), token);
+                    }
 
-                if (!token.IsCancellationRequested)
-                {
-                    _logger.LogWarning("Executing graceful shutdown now");
-                    ExecuteShutdown();
+                    if (!token.IsCancellationRequested)
+                    {
+                        _logger.LogWarning("Executing graceful shutdown now");
+                        ExecuteShutdown();
+                    }
                 }
+                catch (OperationCanceledException) { }
             }, CancellationToken.None);
         }
     }

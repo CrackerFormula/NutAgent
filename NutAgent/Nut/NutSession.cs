@@ -16,7 +16,6 @@ internal sealed class NutSession
 
     private string? _authenticatedUser;
     private bool _passwordVerified;
-    private bool _loggedIn;
 
     public NutSession(TcpClient client, AgentConfig config, Func<UpsState> getState, ILogger logger)
     {
@@ -99,7 +98,6 @@ internal sealed class NutSession
         if (!_passwordVerified) return "ERR ACCESS-DENIED";
         if (!parts[1].Equals(_config.UpsName, StringComparison.OrdinalIgnoreCase))
             return "ERR UNKNOWN-UPS";
-        _loggedIn = true;
         return "OK";
     }
 
@@ -127,7 +125,7 @@ internal sealed class NutSession
         if (!upsName.Equals(_config.UpsName, StringComparison.OrdinalIgnoreCase))
             return "ERR UNKNOWN-UPS";
 
-        var vars = NutVariableMap.Build(_getState(), _config.UpsDescription);
+        var vars = NutVariableMap.Build(_getState(), _config.UpsDescription, _config.ShutdownBatteryThreshold);
         var lines = new System.Text.StringBuilder();
         lines.Append($"BEGIN LIST VAR {upsName}\n");
         foreach (var (k, v) in vars)
@@ -156,7 +154,7 @@ internal sealed class NutSession
         if (!upsName.Equals(_config.UpsName, StringComparison.OrdinalIgnoreCase))
             return "ERR UNKNOWN-UPS";
 
-        var vars = NutVariableMap.Build(_getState(), _config.UpsDescription);
+        var vars = NutVariableMap.Build(_getState(), _config.UpsDescription, _config.ShutdownBatteryThreshold);
         return vars.TryGetValue(varName, out var value)
             ? $"VAR {upsName} {varName} \"{value}\""
             : "ERR VAR-NOT-SUPPORTED";

@@ -3,60 +3,32 @@
 ## WHAT
 
 **Stack:** .NET 8, C#, Windows x64  
-**Projects:** three — Service (core), Tray (WPF UI), Shared (IPC types)
+**Projects:** one (Phase 1) — NutAgent service; Tray + Shared projects are planned for Phase 3
 
 ```
 NutAgent/
 ├── NutAgent.sln
 ├── CLAUDE.md
 ├── install/
-│   └── install.ps1               # installs service + registers tray at login
-├── NutAgent.Service/             # Windows Service: HID + NUT protocol + shutdown + pipe server
-│   ├── NutAgent.Service.csproj
-│   ├── Program.cs
-│   ├── Worker.cs
-│   ├── appsettings.json
-│   ├── Config/
-│   │   └── AgentConfig.cs
-│   ├── Hid/
-│   │   ├── IUpsReader.cs
-│   │   ├── HidUpsReader.cs       # USB HID Power Device reader (HidSharp)
-│   │   ├── FakeUpsReader.cs      # canned data for dev/testing
-│   │   └── UpsState.cs
-│   ├── Nut/
-│   │   ├── NutVariableMap.cs
-│   │   ├── NutSession.cs
-│   │   ├── NutServer.cs
-│   │   └── NutClient.cs
-│   ├── Shutdown/
-│   │   └── ShutdownManager.cs    # charge % OR runtime minutes threshold
-│   ├── Tracking/
-│   │   └── DischargeTracker.cs   # circular buffer → discharge rate (v2 Auto mode)
-│   └── Ipc/
-│       └── PipeServer.cs         # named pipe \\.\pipe\nutagent
-├── NutAgent.Tray/                # WPF tray app — optional UI layer
-│   ├── NutAgent.Tray.csproj
-│   ├── App.xaml / App.xaml.cs
-│   ├── Ipc/
-│   │   └── PipeClient.cs         # polls pipe every 5s for status
-│   ├── ViewModels/
-│   │   ├── TrayViewModel.cs      # icon state + menu text
-│   │   └── SettingsViewModel.cs  # two-way config bindings
-│   ├── Views/
-│   │   └── SettingsWindow.xaml
-│   └── Assets/
-│       ├── icon-online.ico       # green
-│       ├── icon-battery.ico      # yellow
-│       ├── icon-low.ico          # red
-│       └── icon-disconnected.ico # grey
-└── NutAgent.Shared/              # IPC types — referenced by both Service and Tray
-    ├── NutAgent.Shared.csproj
-    ├── Ipc/
-    │   ├── StatusResponse.cs
-    │   ├── ConfigResponse.cs
-    │   └── ConfigUpdateRequest.cs
-    └── Enums/
-        └── ShutdownMode.cs       # Manual | Auto
+│   └── install.ps1               # installs service, opens firewall port
+└── NutAgent/                     # Windows Service — HID + NUT protocol + shutdown
+    ├── NutAgent.csproj           # AssemblyName: ups-agent; SelfContained win-x64
+    ├── Program.cs
+    ├── Worker.cs
+    ├── appsettings.json
+    ├── Config/
+    │   └── AgentConfig.cs
+    ├── Hid/
+    │   ├── IUpsReader.cs
+    │   ├── HidUpsReader.cs       # USB HID Power Device reader (HidSharp 2.1.0)
+    │   └── UpsState.cs
+    ├── Nut/
+    │   ├── NutVariableMap.cs
+    │   ├── NutSession.cs
+    │   ├── NutServer.cs
+    │   └── NutClient.cs
+    └── Shutdown/
+        └── ShutdownManager.cs    # charge % OR runtime minutes threshold
 ```
 
 ---
@@ -90,8 +62,7 @@ Unraid + HA share UPS D — use native NUT, not NutAgent.
 ### Build
 
 ```powershell
-dotnet publish NutAgent.Service/NutAgent.Service.csproj -c Release
-dotnet publish NutAgent.Tray/NutAgent.Tray.csproj -c Release
+dotnet publish NutAgent/NutAgent.csproj -c Release
 ```
 
 ### Install (run as Administrator)
@@ -102,16 +73,12 @@ dotnet publish NutAgent.Tray/NutAgent.Tray.csproj -c Release
 
 # Client mode (PC2):
 .\install\install.ps1 -Mode client -RemoteHost 192.168.1.10
-
-# With tray app:
-.\install\install.ps1 -Mode server -InstallTray
 ```
 
 The installer:
-1. Copies `NutAgent.Service.exe` + `appsettings.json` to `C:\NutAgent\`
+1. Copies `ups-agent.exe` + `appsettings.json` to `C:\NutAgent\`
 2. Registers service via `sc.exe`, sets failure restart actions
-3. Optionally copies `NutAgent.Tray.exe`, adds to `HKCU\...\Run`
-4. Opens firewall port 3493 (server mode only)
+3. Opens firewall port 3493 (server mode only)
 
 ### Configure
 
@@ -126,10 +93,8 @@ Edit `C:\NutAgent\appsettings.json` — service hot-reloads config without resta
 | `Agent.RemoteHost` | `""` | Client mode: server IP |
 | `Agent.RemoteUpsName` | `ups` | Client mode: remote UPS name |
 | `Agent.ShutdownBatteryThreshold` | `20` | Shutdown below this % |
-| `Agent.ShutdownRuntimeMinutes` | `5` | Shutdown below this many minutes |
+| `Agent.ShutdownRuntimeMinutes` | `5` | Shutdown below this many minutes of runtime |
 | `Agent.ShutdownDelaySeconds` | `60` | Grace period before shutdown |
-| `Agent.ShutdownMode` | `Manual` | `Manual` or `Auto` (v4) |
-| `Agent.SafetyMarginMinutes` | `3` | Auto mode safety buffer (v4) |
 | `Agent.PollIntervalSeconds` | `30` | Client poll frequency |
 
 Shutdown triggers on **whichever comes first**: charge % threshold OR runtime minutes threshold.
@@ -236,7 +201,7 @@ double minutesToEmpty   = tracker.MinutesToEmpty;           // e.g. 170 min
 | Phase | Status | Scope |
 |---|---|---|
 | **1** | ✅ Done | Service scaffold, NUT protocol, HID reader stub, basic shutdown |
-| **2** | 🔲 Next | `FakeUpsReader`, runtime threshold, `DischargeTracker`, `PipeServer`, config hot-reload |
+| **2** | 🔧 In progress | ~~runtime threshold~~ ✅; `FakeUpsReader`, `DischargeTracker`, `PipeServer`, config hot-reload |
 | **3** | 🔲 | `NutAgent.Shared`, `NutAgent.Tray` — WPF tray icon + settings window |
 | **4** | 🔲 | Auto mode — `DischargeTracker` drives dynamic shutdown threshold |
 

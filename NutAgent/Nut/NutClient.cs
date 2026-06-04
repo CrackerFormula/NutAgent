@@ -44,29 +44,47 @@ public sealed class NutClient
     private async Task PollOnceAsync(CancellationToken ct)
     {
         using var tcp = new TcpClient();
-        await tcp.ConnectAsync(_config.RemoteHost, _config.RemotePort, ct);
+        using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        connectCts.CancelAfter(TimeSpan.FromSeconds(10));
+        try
+        {
+            await tcp.ConnectAsync(_config.RemoteHost, _config.RemotePort, connectCts.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new TimeoutException($"Connection to {_config.RemoteHost}:{_config.RemotePort} timed out");
+        }
 
-        await using var stream = tcp.GetStream();
+        var stream = tcp.GetStream();
+        stream.ReadTimeout  = 10_000;
+        stream.WriteTimeout = 10_000;
+
         using var reader = new StreamReader(stream, leaveOpen: true);
         await using var writer = new StreamWriter(stream, leaveOpen: true) { AutoFlush = true };
 
         await AuthenticateAsync(writer, reader, ct);
 
-        var status = await QueryVarAsync(writer, reader, "ups.status", ct);
-        var chargeStr = await QueryVarAsync(writer, reader, "battery.charge", ct);
+        var status     = await QueryVarAsync(writer, reader, "ups.status",      ct);
+        var chargeStr  = await QueryVarAsync(writer, reader, "battery.charge",  ct);
+        var runtimeStr = await QueryVarAsync(writer, reader, "battery.runtime", ct);
 
         await writer.WriteLineAsync("LOGOUT");
 
-        _logger.LogDebug("UPS status={Status} charge={Charge}", status, chargeStr);
+        _logger.LogDebug("UPS status={Status} charge={Charge} runtime={Runtime}s", status, chargeStr, runtimeStr);
 
-        var charge = double.TryParse(chargeStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var c) ? c : 100.0;
-        var isOnBattery = status.Contains("OB");
+        var charge  = double.TryParse(chargeStr,  NumberStyles.Float, CultureInfo.InvariantCulture, out var c) ? c : 100.0;
+        var runtime = int.TryParse(runtimeStr, out var r) ? r : int.MaxValue;
+        var isOnBattery  = status.Contains("OB");
         var isLowBattery = status.Contains("LB");
 
-        if (isLowBattery || (isOnBattery && charge <= _config.ShutdownBatteryThreshold))
+        bool chargeCritical  = charge <= _config.ShutdownBatteryThreshold;
+        bool runtimeCritical = runtime > 0 && runtime <= _config.ShutdownRuntimeMinutes * 60;
+
+        if (isLowBattery || (isOnBattery && (chargeCritical || runtimeCritical)))
         {
-            _logger.LogWarning("UPS critical (status={Status} charge={Charge}%) — scheduling shutdown in {Delay}s",
-                status, charge, isLowBattery ? 0 : _config.ShutdownDelaySeconds);
+            _logger.LogWarning(
+                "UPS critical (status={Status} charge={Charge}% runtime={Runtime}s) — scheduling shutdown in {Delay}s",
+                status, charge, runtime, isLowBattery ? 0 : _config.ShutdownDelaySeconds);
             _shutdown.ScheduleShutdown(isLowBattery ? 0 : _config.ShutdownDelaySeconds);
         }
         else if (!isOnBattery)
@@ -80,14 +98,17 @@ public sealed class NutClient
         if (!string.IsNullOrEmpty(_config.RemoteUsername))
         {
             await writer.WriteLineAsync($"USERNAME {_config.RemoteUsername}");
-            await reader.ReadLineAsync(ct); // OK or ERR
+            var r1 = await reader.ReadLineAsync(ct) ?? "";
+            if (r1.StartsWith("ERR")) throw new InvalidOperationException($"Authentication failed: {r1}");
 
             await writer.WriteLineAsync($"PASSWORD {_config.RemotePassword}");
-            await reader.ReadLineAsync(ct); // OK or ERR
+            var r2 = await reader.ReadLineAsync(ct) ?? "";
+            if (r2.StartsWith("ERR")) throw new InvalidOperationException($"Authentication failed: {r2}");
         }
 
         await writer.WriteLineAsync($"LOGIN {_config.RemoteUpsName}");
-        await reader.ReadLineAsync(ct); // OK or ERR
+        var r3 = await reader.ReadLineAsync(ct) ?? "";
+        if (r3.StartsWith("ERR")) throw new InvalidOperationException($"Login failed: {r3}");
     }
 
     private async Task<string> QueryVarAsync(StreamWriter writer, StreamReader reader, string varName, CancellationToken ct)

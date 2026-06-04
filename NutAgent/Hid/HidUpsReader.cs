@@ -201,6 +201,7 @@ public sealed class HidUpsReader : IUpsReader
             {
                 1 => device.GetManufacturer(),
                 2 => device.GetProductName(),
+                3 => device.GetSerialNumber(),
                 _ => ""
             };
         }
