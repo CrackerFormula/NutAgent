@@ -1,12 +1,12 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using WinNUT.Config;
-using WinNUT.Hid;
-using WinNUT.Nut;
-using WinNUT.Shutdown;
+using NutAgent.Config;
+using NutAgent.Hid;
+using NutAgent.Nut;
+using NutAgent.Shutdown;
 
-namespace WinNUT;
+namespace NutAgent;
 
 public sealed class Worker : BackgroundService
 {

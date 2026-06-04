@@ -1,4 +1,4 @@
-# WinNUT
+# NutAgent
 
 ## WHAT
 
@@ -7,13 +7,13 @@
 **Output:** `ups-agent.exe` — one binary, two modes
 
 ```
-WinNUT/
-├── WinNUT.sln
+NutAgent/
+├── NutAgent.sln
 ├── CLAUDE.md
 ├── install/
 │   └── install.ps1          # installs/registers Windows service
-└── WinNUT/
-    ├── WinNUT.csproj
+└── NutAgent/
+    ├── NutAgent.csproj
     ├── Program.cs            # host builder, DI, Windows service hook
     ├── Worker.cs             # BackgroundService — wires mode branches
     ├── appsettings.json      # all config (mode, port, users, thresholds)
@@ -61,8 +61,8 @@ PC2 doesn't have a USB connection to its UPS — it runs in client mode, monitor
 
 ```powershell
 # On the target Windows machine or cross-compiled from Mac:
-dotnet publish WinNUT/WinNUT.csproj -c Release
-# Output: WinNUT/bin/Release/net8.0-windows/win-x64/publish/ups-agent.exe
+dotnet publish NutAgent/NutAgent.csproj -c Release
+# Output: NutAgent/bin/Release/net8.0-windows/win-x64/publish/ups-agent.exe
 ```
 
 ### Install (run as Administrator on each Windows PC)
@@ -76,14 +76,14 @@ dotnet publish WinNUT/WinNUT.csproj -c Release
 ```
 
 The installer:
-1. Copies `ups-agent.exe` and `appsettings.json` to `C:\WinNUT\`
+1. Copies `ups-agent.exe` and `appsettings.json` to `C:\NutAgent\`
 2. Patches `appsettings.json` for the correct mode/remote host
 3. Registers and starts the Windows service
 4. Opens firewall port 3493 (server mode only)
 
 ### Configure
 
-Edit `C:\WinNUT\appsettings.json` then restart the service (`Restart-Service WinNUT`).
+Edit `C:\NutAgent\appsettings.json` then restart the service (`Restart-Service NutAgent`).
 
 Key fields:
 | Field | Default | Notes |
@@ -100,7 +100,7 @@ Key fields:
 
 ### Logs
 
-Windows Event Viewer → Windows Logs → Application → Source: `WinNUT UPS Agent`
+Windows Event Viewer → Windows Logs → Application → Source: `NutAgent UPS Agent`
 
 ### Verify with HA
 
@@ -174,7 +174,7 @@ Add a `FakeUpsReader : IUpsReader` that returns canned data. Wire it in when no 
 
 ## NUT Protocol Reference
 
-WinNUT implements the subset needed by Home Assistant and upsmon:
+NutAgent implements the subset needed by Home Assistant and upsmon:
 
 | Command | Response |
 |---|---|
@@ -190,5 +190,5 @@ WinNUT implements the subset needed by Home Assistant and upsmon:
 | `GET TYPE <ups> <var>` | `TYPE <ups> <var> STRING:256` or `INTEGER` |
 | `GET DESC <ups> <var>` | `DESC <ups> <var> "<description>"` |
 | `GET UPSDESC <ups>` | `UPSDESC <ups> "<description>"` |
-| `VER` | `WinNUT 1.0.0` |
+| `VER` | `NutAgent 1.0.0` |
 | `NETVER` | `3` |

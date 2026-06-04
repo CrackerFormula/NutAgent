@@ -1,9 +1,9 @@
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
-using WinNUT.Config;
-using WinNUT.Hid;
+using NutAgent.Config;
+using NutAgent.Hid;
 
-namespace WinNUT.Nut;
+namespace NutAgent.Nut;
 
 // Handles a single NUT client connection.
 // NUT protocol spec: https://networkupstools.org/docs/developer-guide.chunked/ar01s09.html
@@ -65,7 +65,7 @@ internal sealed class NutSession
             "LOGOUT"   => "OK Goodbye",
             "LIST"     => HandleList(parts),
             "GET"      => HandleGet(parts),
-            "VER"      => "WinNUT 1.0.0",
+            "VER"      => "NutAgent 1.0.0",
             "NETVER"   => "3",
             _          => "ERR UNKNOWN-COMMAND"
         };

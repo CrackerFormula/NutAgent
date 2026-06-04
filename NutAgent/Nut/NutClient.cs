@@ -1,11 +1,11 @@
 using System.Globalization;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
-using WinNUT.Config;
-using WinNUT.Hid;
-using WinNUT.Shutdown;
+using NutAgent.Config;
+using NutAgent.Hid;
+using NutAgent.Shutdown;
 
-namespace WinNUT.Nut;
+namespace NutAgent.Nut;
 
 // Polls a remote NUT server and triggers a local shutdown when power is lost.
 public sealed class NutClient

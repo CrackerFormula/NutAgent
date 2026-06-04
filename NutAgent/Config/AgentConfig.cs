@@ -1,4 +1,4 @@
-namespace WinNUT.Config;
+namespace NutAgent.Config;
 
 public class AgentConfig
 {

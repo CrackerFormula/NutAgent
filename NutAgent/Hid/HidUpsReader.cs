@@ -3,7 +3,7 @@ using HidSharp.Reports;
 using HidSharp.Reports.Input;
 using Microsoft.Extensions.Logging;
 
-namespace WinNUT.Hid;
+namespace NutAgent.Hid;
 
 // Reads UPS state from a USB HID Power Device (Usage Page 0x84 / 0x85).
 // HID UPS spec: https://www.usb.org/sites/default/files/pdcv10.pdf

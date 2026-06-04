@@ -1,13 +1,13 @@
-using WinNUT.Hid;
+using NutAgent.Hid;
 
-namespace WinNUT.Nut;
+namespace NutAgent.Nut;
 
 // Maps UpsState to NUT variable names and values.
 // Variable names follow the NUT naming convention:
 // https://networkupstools.org/docs/developer-guide.chunked/apas01.html
 public static class NutVariableMap
 {
-    private const string DriverName    = "WinNUT";
+    private const string DriverName    = "NutAgent";
     private const string DriverVersion = "1.0.0";
 
     public static IReadOnlyDictionary<string, string> Build(UpsState state, string upsDescription)

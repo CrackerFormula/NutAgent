@@ -1,4 +1,4 @@
-namespace WinNUT.Hid;
+namespace NutAgent.Hid;
 
 public interface IUpsReader : IDisposable
 {

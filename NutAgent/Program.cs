@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using WinNUT;
-using WinNUT.Config;
+using NutAgent;
+using NutAgent.Config;
 
 // Command line overrides: --mode server|client --ups-name <name> --remote-host <ip>
 // All other config comes from appsettings.json or the Windows registry (via appsettings path).
@@ -14,7 +14,7 @@ builder.Services.AddHostedService<Worker>();
 // First-class Windows service support: graceful start/stop via SCM
 builder.Services.AddWindowsService(opts =>
 {
-    opts.ServiceName = "WinNUT UPS Agent";
+    opts.ServiceName = "NutAgent UPS Agent";
 });
 
 var host = builder.Build();

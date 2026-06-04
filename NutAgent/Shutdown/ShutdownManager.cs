@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 
-namespace WinNUT.Shutdown;
+namespace NutAgent.Shutdown;
 
 public sealed class ShutdownManager
 {

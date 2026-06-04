@@ -23,8 +23,8 @@ param(
     [string]$Mode,
 
     [string]$RemoteHost = "",
-    [string]$InstallDir = "C:\WinNUT",
-    [string]$ServiceName = "WinNUT"
+    [string]$InstallDir = "C:\NutAgent",
+    [string]$ServiceName = "NutAgent"
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,8 +35,8 @@ $cfg = Join-Path $InstallDir "appsettings.json"
 if (-not (Test-Path $InstallDir)) { New-Item -ItemType Directory -Path $InstallDir | Out-Null }
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$sourceExe = Join-Path $scriptDir "..\WinNUT\bin\Release\net8.0-windows\win-x64\publish\ups-agent.exe"
-$sourceCfg = Join-Path $scriptDir "..\WinNUT\appsettings.json"
+$sourceExe = Join-Path $scriptDir "..\NutAgent\bin\Release\net8.0-windows\win-x64\publish\ups-agent.exe"
+$sourceCfg = Join-Path $scriptDir "..\NutAgent\appsettings.json"
 
 if (-not (Test-Path $sourceExe)) {
     Write-Error "ups-agent.exe not found. Run: dotnet publish -c Release first."
@@ -62,8 +62,8 @@ if ($existing) {
     Start-Sleep -Seconds 2
 }
 
-sc.exe create $ServiceName binPath= "`"$exe`"" start= auto DisplayName= "WinNUT UPS Agent" | Out-Null
-sc.exe description $ServiceName "NUT-compatible UPS monitoring agent (WinNUT)" | Out-Null
+sc.exe create $ServiceName binPath= "`"$exe`"" start= auto DisplayName= "NutAgent UPS Agent" | Out-Null
+sc.exe description $ServiceName "NUT-compatible UPS monitoring agent (NutAgent)" | Out-Null
 sc.exe failure $ServiceName reset= 60 actions= restart/5000/restart/10000/restart/30000 | Out-Null
 
 Write-Host "Starting service..."
@@ -74,13 +74,13 @@ Write-Host "Service status: $status"
 
 if ($Mode -eq "server") {
     # Open firewall for NUT port
-    $ruleName = "WinNUT NUT Server (TCP 3493)"
+    $ruleName = "NutAgent NUT Server (TCP 3493)"
     Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
     New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol TCP -LocalPort 3493 -Action Allow | Out-Null
     Write-Host "Firewall rule added for port 3493"
 }
 
 Write-Host ""
-Write-Host "WinNUT installed successfully in $Mode mode."
+Write-Host "NutAgent installed successfully in $Mode mode."
 Write-Host "Config: $cfg"
-Write-Host "Logs:   Event Viewer > Windows Logs > Application (Source: WinNUT)"
+Write-Host "Logs:   Event Viewer > Windows Logs > Application (Source: NutAgent)"

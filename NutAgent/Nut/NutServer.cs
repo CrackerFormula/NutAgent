@@ -1,10 +1,10 @@
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
-using WinNUT.Config;
-using WinNUT.Hid;
+using NutAgent.Config;
+using NutAgent.Hid;
 
-namespace WinNUT.Nut;
+namespace NutAgent.Nut;
 
 public sealed class NutServer : IAsyncDisposable
 {

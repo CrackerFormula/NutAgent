@@ -1,4 +1,4 @@
-namespace WinNUT.Hid;
+namespace NutAgent.Hid;
 
 public class UpsState
 {
