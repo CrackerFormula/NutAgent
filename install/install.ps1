@@ -42,6 +42,15 @@ if (-not (Test-Path $sourceExe)) {
     Write-Error "ups-agent.exe not found. Run: dotnet publish -c Release first."
 }
 
+# --- Stop and remove existing service before touching the file ---
+$existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+if ($existing) {
+    Write-Host "Stopping existing service..."
+    Stop-Service -Name $ServiceName -Force
+    & "$env:SystemRoot\System32\sc.exe" delete $ServiceName | Out-Null
+    Start-Sleep -Seconds 2
+}
+
 Copy-Item $sourceExe $InstallDir -Force
 Copy-Item $sourceCfg $InstallDir -Force
 
@@ -53,18 +62,11 @@ if ($Mode -eq "client" -and $RemoteHost) {
 }
 $json | ConvertTo-Json -Depth 10 | Set-Content $cfg
 
-# --- Install / update service ---
-$existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-if ($existing) {
-    Write-Host "Stopping existing service..."
-    Stop-Service -Name $ServiceName -Force
-    sc.exe delete $ServiceName | Out-Null
-    Start-Sleep -Seconds 2
-}
+# --- Register service ---
 
-sc.exe create $ServiceName binPath= "`"$exe`"" start= auto DisplayName= "NutAgent UPS Agent" | Out-Null
-sc.exe description $ServiceName "NUT-compatible UPS monitoring agent (NutAgent)" | Out-Null
-sc.exe failure $ServiceName reset= 60 actions= restart/5000/restart/10000/restart/30000 | Out-Null
+& "$env:SystemRoot\System32\sc.exe" create $ServiceName binPath= "`"$exe`"" start= auto DisplayName= "NutAgent UPS Agent" | Out-Null
+& "$env:SystemRoot\System32\sc.exe" description $ServiceName "NUT-compatible UPS monitoring agent (NutAgent)" | Out-Null
+& "$env:SystemRoot\System32\sc.exe" failure $ServiceName reset= 60 actions= restart/5000/restart/10000/restart/30000 | Out-Null
 
 Write-Host "Starting service..."
 Start-Service -Name $ServiceName

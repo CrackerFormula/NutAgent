@@ -211,10 +211,29 @@ public sealed class HidUpsReader : IUpsReader
 
     private void ReadNominalValues()
     {
-        // TODO: Read feature reports for nominal values not available on input reports
-        // (e.g. battery.voltage.nominal, input.voltage.nominal on some devices).
-        // Feature report IDs are device-specific — map after live testing with
-        // hidapitester --list-detail.
+        // Seed values from feature reports — many UPS devices only send input reports
+        // when values change, so battery.charge / battery.runtime arrive only on first
+        // change after connect. Reading feature reports on startup gives immediate values.
+        if (_stream == null || _device == null || _deviceItems == null) return;
+
+        int maxLen = _device.GetMaxFeatureReportLength();
+        if (maxLen <= 0) return;
+
+        var buf = new byte[maxLen];
+
+        foreach (var deviceItem in _deviceItems)
+        {
+            foreach (var report in deviceItem.FeatureReports)
+            {
+                Array.Clear(buf, 0, buf.Length);
+                buf[0] = report.ReportID;
+                try { _stream.GetFeature(buf); }
+                catch { continue; }
+
+                try { report.Read(buf, 0, (DataValue value) => ApplyDataValue(value)); }
+                catch { }
+            }
+        }
     }
 
     private static HidDevice? FindUpsDevice()
