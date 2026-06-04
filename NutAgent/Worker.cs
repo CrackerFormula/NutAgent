@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -77,9 +78,33 @@ public sealed class Worker : BackgroundService
             }
         }, ct);
 
-        var server = new NutServer(_config, GetState, _loggerFactory.CreateLogger<NutServer>());
-        var pipe   = new PipeServer(GetState, _config, _loggerFactory.CreateLogger<PipeServer>());
-        await Task.WhenAll(readLoop, server.RunAsync(ct), pipe.RunAsync(ct));
+        // NutServer restart channel — signalled by PipeServer when the port changes.
+        var restartCh = Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
+            { FullMode = BoundedChannelFullMode.DropOldest });
+
+        var nutServerLoop = Task.Run(async () =>
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                using var serverCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                var server      = new NutServer(_config, GetState, _loggerFactory.CreateLogger<NutServer>());
+                var serverTask  = server.RunAsync(serverCts.Token);
+                var triggerTask = restartCh.Reader.ReadAsync(ct).AsTask();
+
+                await Task.WhenAny(serverTask, triggerTask);
+                serverCts.Cancel();
+                try { await serverTask; } catch (OperationCanceledException) { }
+
+                if (triggerTask.IsCompletedSuccessfully && !ct.IsCancellationRequested)
+                    _logger.LogInformation("NUT server restarting on port {Port}", _config.Port);
+            }
+        }, ct);
+
+        var pipe = new PipeServer(GetState, _config,
+            onNutServerRestart: () => restartCh.Writer.TryWrite(true),
+            _loggerFactory.CreateLogger<PipeServer>());
+
+        await Task.WhenAll(readLoop, nutServerLoop, pipe.RunAsync(ct));
     }
 
     private async Task RunClientAsync(CancellationToken ct)

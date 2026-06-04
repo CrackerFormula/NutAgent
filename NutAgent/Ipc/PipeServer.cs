@@ -21,13 +21,15 @@ public sealed class PipeServer
 
     private readonly Func<UpsState>      _getState;
     private readonly AgentConfig         _config;
+    private readonly Action?             _onNutServerRestart;
     private readonly ILogger<PipeServer> _logger;
 
-    public PipeServer(Func<UpsState> getState, AgentConfig config, ILogger<PipeServer> logger)
+    public PipeServer(Func<UpsState> getState, AgentConfig config, Action? onNutServerRestart, ILogger<PipeServer> logger)
     {
-        _getState = getState;
-        _config   = config;
-        _logger   = logger;
+        _getState           = getState;
+        _config             = config;
+        _onNutServerRestart = onNutServerRestart;
+        _logger             = logger;
     }
 
     public async Task RunAsync(CancellationToken ct)
@@ -127,22 +129,47 @@ public sealed class PipeServer
 
     private string ApplySetConfig(JsonElement el)
     {
+        bool portChanged  = false;
+        bool modeChanged  = false;
+
         // Threshold fields — effective immediately on next poll cycle.
         if (el.TryGetProperty("shutdownBatteryThreshold", out var bt)) _config.ShutdownBatteryThreshold = bt.GetInt32();
         if (el.TryGetProperty("shutdownRuntimeMinutes",   out var rt)) _config.ShutdownRuntimeMinutes   = rt.GetInt32();
         if (el.TryGetProperty("shutdownDelaySeconds",     out var ds)) _config.ShutdownDelaySeconds     = ds.GetInt32();
 
-        // Structural fields — persisted but require service restart to take effect.
-        if (el.TryGetProperty("port",               out var port))                           _config.Port             = port.GetInt32();
-        if (el.TryGetProperty("upsName",            out var un)  && un.GetString()  is {} u) _config.UpsName          = u;
-        if (el.TryGetProperty("upsDescription",     out var ud)  && ud.GetString()  is {} d) _config.UpsDescription   = d;
-        if (el.TryGetProperty("remoteHost",         out var rh)  && rh.GetString()  is {} h) _config.RemoteHost       = h;
-        if (el.TryGetProperty("remotePort",         out var rp))                             _config.RemotePort       = rp.GetInt32();
-        if (el.TryGetProperty("remoteUpsName",      out var ru)  && ru.GetString()  is {} r) _config.RemoteUpsName    = r;
-        if (el.TryGetProperty("pollIntervalSeconds",out var pi))                             _config.PollIntervalSeconds = pi.GetInt32();
+        // Name / identity fields — NutSession reads these live, effective immediately.
+        if (el.TryGetProperty("upsName",        out var un) && un.GetString() is {} u) _config.UpsName        = u;
+        if (el.TryGetProperty("upsDescription", out var ud) && ud.GetString() is {} d) _config.UpsDescription = d;
+
+        // Remote fields (client mode) — NutClient reads per-poll, effective on next poll.
+        if (el.TryGetProperty("remoteHost",          out var rh) && rh.GetString() is {} h) _config.RemoteHost    = h;
+        if (el.TryGetProperty("remotePort",          out var rp))                            _config.RemotePort    = rp.GetInt32();
+        if (el.TryGetProperty("remoteUpsName",       out var ru) && ru.GetString() is {} r)  _config.RemoteUpsName = r;
+        if (el.TryGetProperty("pollIntervalSeconds", out var pi))                            _config.PollIntervalSeconds = pi.GetInt32();
+
+        // Port change — NutServer rebinds on restart.
+        if (el.TryGetProperty("port", out var port) && port.GetInt32() != _config.Port)
+        {
+            _config.Port = port.GetInt32();
+            portChanged  = true;
+        }
+
+        // Mode change — requires full service restart (Server↔Client restructures the worker).
+        if (el.TryGetProperty("mode", out var modeEl) && modeEl.GetString() is {} modeStr &&
+            Enum.TryParse<AgentMode>(modeStr, ignoreCase: true, out var mode) && mode != _config.Mode)
+        {
+            _config.Mode = mode;
+            modeChanged  = true;
+        }
 
         PersistConfig();
-        return """{"ok":true}""";
+
+        if (portChanged)
+            _onNutServerRestart?.Invoke();
+
+        return modeChanged
+            ? """{"ok":true,"requiresRestart":true}"""
+            : """{"ok":true}""";
     }
 
     private void PersistConfig()
