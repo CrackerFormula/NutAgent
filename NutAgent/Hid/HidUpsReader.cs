@@ -82,6 +82,7 @@ public sealed class HidUpsReader : IUpsReader
     private DeviceItem[]?            _deviceItems;
     private HidDeviceInputReceiver?  _inputReceiver;
     private byte[]?                  _inputReportBuffer;
+    private byte[]?                  _featureReportBuffer;
     private DeviceItemInputParser[]? _parsers;
     private UpsState _lastState = new();
 
@@ -111,9 +112,10 @@ public sealed class HidUpsReader : IUpsReader
 
             _descriptor  = _device.GetReportDescriptor();
             _deviceItems = _descriptor.DeviceItems.ToArray();
-            _inputReceiver     = _descriptor.CreateHidDeviceInputReceiver();
-            _inputReportBuffer = new byte[_device.GetMaxInputReportLength()];
-            _parsers           = _deviceItems.Select(item => item.CreateDeviceItemInputParser()).ToArray();
+            _inputReceiver       = _descriptor.CreateHidDeviceInputReceiver();
+            _inputReportBuffer   = new byte[_device.GetMaxInputReportLength()];
+            _featureReportBuffer = new byte[_device.GetMaxFeatureReportLength()];
+            _parsers             = _deviceItems.Select(item => item.CreateDeviceItemInputParser()).ToArray();
             _inputReceiver.Start(_stream);
 
             // Identity from USB string descriptors
@@ -173,7 +175,7 @@ public sealed class HidUpsReader : IUpsReader
             _lastState.Variables["ups.status"] = _lastState.Status.ToNutString();
             _lastState.LastUpdated = DateTime.UtcNow;
             if (_pollCount <= 5)
-                _logger.LogInformation("Poll {Poll}: status={Status} acPresentReceived={AcPresent} charge={Charge} runtime={Runtime}", _pollCount, _lastState.Status, _acPresentReceived, _lastState.BatteryCharge, _lastState.RuntimeSeconds);
+                _logger.LogInformation("Startup poll {Poll}: status={Status} acPresentReceived={AcPresent} charge={Charge} runtime={Runtime}", _pollCount, _lastState.Status, _acPresentReceived, _lastState.BatteryCharge, _lastState.RuntimeSeconds);
         }
         catch (Exception ex)
         {
@@ -189,7 +191,7 @@ public sealed class HidUpsReader : IUpsReader
         return _lastState.Clone();
     }
 
-    private void ApplyDataValue(DataValue value, bool applyStatus = true)
+    private void ApplyDataValue(DataValue value)
     {
         foreach (uint usage in value.Usages.Select(u => (uint)u))
         {
@@ -205,7 +207,7 @@ public sealed class HidUpsReader : IUpsReader
                 else if (numMap.NutVar == "battery.runtime")
                     _lastState.RuntimeSeconds = (int)physical;
             }
-            else if (applyStatus && usage == AcPresentUsage)
+            else if (usage == AcPresentUsage)
             {
                 bool firstTime = !_acPresentReceived;
                 _acPresentReceived = true;
@@ -216,14 +218,14 @@ public sealed class HidUpsReader : IUpsReader
                     ? (_lastState.Status | UpsStatus.OnLine)    & ~UpsStatus.OnBattery
                     : (_lastState.Status | UpsStatus.OnBattery) & ~UpsStatus.OnLine;
             }
-            else if (applyStatus && StatusUsages.TryGetValue(usage, out var flag))
+            else if (StatusUsages.TryGetValue(usage, out var flag))
             {
                 int logical = value.GetLogicalValue();
                 if (logical != 0)
                     _lastState.Status |= flag;
                 else
                     _lastState.Status &= ~flag;
-                if (_pollCount < 5)
+                if (_pollCount <= 5)
                     _logger.LogInformation("HID status usage 0x{Usage:X8} flag={Flag} logical={Logical}", usage, flag, logical);
             }
         }
@@ -232,7 +234,7 @@ public sealed class HidUpsReader : IUpsReader
         // usage is received. For the Tripp Lite (and similar devices), feature reports reliably
         // report Charging=1 on AC and Discharging=1 on battery — so these flags are trustworthy.
         // Charging takes priority over Discharging to handle AC-restore transitions.
-        if (applyStatus && !_acPresentReceived)
+        if (!_acPresentReceived)
         {
             if (_lastState.Status.HasFlag(UpsStatus.Charging))
                 _lastState.Status = (_lastState.Status | UpsStatus.OnLine) & ~UpsStatus.OnBattery & ~UpsStatus.Discharging;
@@ -254,27 +256,20 @@ public sealed class HidUpsReader : IUpsReader
         // Seed values from feature reports — many UPS devices only send input reports
         // when values change, so battery.charge / battery.runtime arrive only on first
         // change after connect. Reading feature reports on startup gives immediate values.
-        if (_stream == null || _device == null || _deviceItems == null) return;
-
-        int maxLen = _device.GetMaxFeatureReportLength();
-        if (maxLen <= 0) return;
-
-        var buf = new byte[maxLen];
+        if (_stream == null || _deviceItems == null || _featureReportBuffer == null) return;
 
         foreach (var deviceItem in _deviceItems)
         {
             foreach (var report in deviceItem.FeatureReports)
             {
-                Array.Clear(buf, 0, buf.Length);
-                buf[0] = report.ReportID;
-                try { _stream.GetFeature(buf); }
+                Array.Clear(_featureReportBuffer, 0, _featureReportBuffer.Length);
+                _featureReportBuffer[0] = report.ReportID;
+                try { _stream.GetFeature(_featureReportBuffer); }
                 catch { continue; }
 
-                // applyStatus: true — feature reports are the authoritative status source for
-                // devices (like Tripp Lite) that don't send spontaneous input reports on state
-                // changes. Charging/Discharging flags here are reliable: Charging=1 on AC,
-                // Discharging=1 on battery.
-                try { report.Read(buf, 0, (DataValue value) => ApplyDataValue(value, applyStatus: true)); }
+                // Feature reports are the authoritative status source for devices (like Tripp Lite)
+                // that don't push spontaneous input reports on state changes.
+                try { report.Read(_featureReportBuffer, 0, (DataValue value) => ApplyDataValue(value)); }
                 catch { }
             }
         }
