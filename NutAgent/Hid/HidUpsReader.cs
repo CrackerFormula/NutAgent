@@ -14,17 +14,18 @@ public sealed class HidUpsReader : IUpsReader
     // HID usage → NUT variable mapping
     // -------------------------------------------------------------------------
 
-    private sealed record NumericUsage(string NutVar, string Format);
+    // Scale converts the HID logical value to the real-world unit reported via NUT.
+    // The Tripp Lite (and similar) firmware encodes measured electrical values (voltage,
+    // frequency, current) in tenths of the base unit (e.g. logical 1223 = 122.3 V),
+    // while nominal and transfer values use whole units (logical 120 = 120 V).
+    // GetPhysicalValue() can't be used directly — it applies the physical/logical range
+    // scaling from the descriptor, which doubles the error for this device's non-standard
+    // unit exponent encoding. Using logical × scale gives correct results.
+    private sealed record NumericUsage(string NutVar, string Format, double Scale = 1.0);
 
-    // Numeric usages: reading goes into Variables[NutVar], formatted with Format.
-    // Input voltage (0x84/0x30) and output voltage share the same usage — the
-    // distinction requires checking the parent collection, which needs live
-    // hardware testing. 0x84/0x30 is mapped to input.voltage initially; if the
-    // device also reports output.voltage separately it will arrive via 0x84/0x30
-    // in a different collection and overwrite this entry. Revisit after testing.
     private static readonly Dictionary<uint, NumericUsage> NumericUsages = new()
     {
-        // Battery System (page 0x85)
+        // Battery System (page 0x85) — logical values are in whole units
         [(0x85u << 16) | 0x66] = new("battery.charge",          "F0"),
         [(0x85u << 16) | 0x68] = new("battery.runtime",         "F0"),
         [(0x85u << 16) | 0x30] = new("battery.voltage",         "F2"),
@@ -34,10 +35,11 @@ public sealed class HidUpsReader : IUpsReader
         [(0x85u << 16) | 0x83] = new("battery.capacity",        "F0"),
         [(0x85u << 16) | 0x8F] = new("battery.cyclecount",      "F0"),
 
-        // Power Device (page 0x84) — numeric
-        [(0x84u << 16) | 0x30] = new("input.voltage",           "F1"),
-        [(0x84u << 16) | 0x31] = new("input.current",           "F2"),
-        [(0x84u << 16) | 0x32] = new("input.frequency",         "F1"),
+        // Power Device (page 0x84) — measured values use 0.1-unit encoding (Scale=0.1),
+        // nominal/transfer/load values use whole-unit encoding (Scale=1.0, the default)
+        [(0x84u << 16) | 0x30] = new("input.voltage",           "F1", 0.1),
+        [(0x84u << 16) | 0x31] = new("input.current",           "F2", 0.1),
+        [(0x84u << 16) | 0x32] = new("input.frequency",         "F1", 0.1),
         [(0x84u << 16) | 0x33] = new("ups.power",               "F0"),
         [(0x84u << 16) | 0x34] = new("ups.realpower",           "F0"),
         [(0x84u << 16) | 0x35] = new("ups.load",                "F0"),
@@ -197,15 +199,15 @@ public sealed class HidUpsReader : IUpsReader
         {
             if (NumericUsages.TryGetValue(usage, out var numMap))
             {
-                var physical  = value.GetPhysicalValue();
-                var formatted = physical.ToString(numMap.Format, CultureInfo.InvariantCulture);
+                var actual    = value.GetLogicalValue() * numMap.Scale;
+                var formatted = actual.ToString(numMap.Format, CultureInfo.InvariantCulture);
                 _lastState.Variables[numMap.NutVar] = formatted;
 
                 // Keep typed fields in sync for shutdown logic
                 if (numMap.NutVar == "battery.charge")
-                    _lastState.BatteryCharge = physical;
+                    _lastState.BatteryCharge = actual;
                 else if (numMap.NutVar == "battery.runtime")
-                    _lastState.RuntimeSeconds = (int)physical;
+                    _lastState.RuntimeSeconds = (int)actual;
             }
             else if (usage == AcPresentUsage)
             {
