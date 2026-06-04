@@ -44,6 +44,7 @@ public static class NutVariableMap
         "battery.charge.full"     or
         "battery.cyclecount"      or
         "battery.runtime"         or
+        "battery.runtime.est"     or
         "ups.load"                or
         "ups.power"               or
         "ups.realpower"           => "INTEGER",
@@ -58,6 +59,7 @@ public static class NutVariableMap
         "battery.charge.full"     => "Battery full charge capacity",
         "battery.cyclecount"      => "Battery cycle count",
         "battery.runtime"         => "Estimated runtime on battery (seconds)",
+        "battery.runtime.est"     => "Discharge-rate estimated runtime (seconds)",
         "battery.temperature"     => "Battery temperature (degrees C)",
         "battery.type"            => "Battery chemistry",
         "battery.voltage"         => "Battery voltage",

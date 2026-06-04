@@ -30,6 +30,7 @@ public sealed class Worker : BackgroundService
 
         using var reader   = new HidUpsReader(_loggerFactory.CreateLogger<HidUpsReader>());
         var       shutdown = new ShutdownManager(_loggerFactory.CreateLogger<ShutdownManager>());
+        var       tracker  = new DischargeTracker();
 
         // Written by readLoop, read by concurrent NutSession tasks — use Volatile to prevent stale reads.
         UpsState state = new UpsState();
@@ -37,12 +38,24 @@ public sealed class Worker : BackgroundService
 
         var readLoop = Task.Run(async () =>
         {
+            bool wasOnBattery = false;
             while (!ct.IsCancellationRequested)
             {
-                var newState = reader.Read();
+                var newState     = reader.Read();
+                bool isOnBattery = newState.Status.IsOnBattery();
+
+                if (!isOnBattery && wasOnBattery)
+                    tracker.Reset();
+                wasOnBattery = isOnBattery;
+
+                tracker.Record(newState.BatteryCharge, newState.LastUpdated);
+                var minutesToEmpty = tracker.MinutesToEmpty;
+                if (minutesToEmpty < double.MaxValue)
+                    newState.Variables["battery.runtime.est"] = ((int)(minutesToEmpty * 60)).ToString();
+
                 Volatile.Write(ref state, newState);
 
-                if (newState.Status.IsOnBattery())
+                if (isOnBattery)
                 {
                     _logger.LogWarning("UPS on battery — charge: {Charge:F0}%  runtime: {Runtime}s",
                         newState.BatteryCharge, newState.RuntimeSeconds);
