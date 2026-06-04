@@ -244,11 +244,6 @@ public sealed class HidUpsReader : IUpsReader
                 _lastState.Status = (_lastState.Status | UpsStatus.OnLine) & ~UpsStatus.OnBattery;
         }
 
-        // Derive LowBattery from charge — real devices often don't send this flag separately
-        if (_lastState.BatteryCharge <= 10)
-            _lastState.Status |= UpsStatus.LowBattery;
-        else
-            _lastState.Status &= ~UpsStatus.LowBattery;
     }
 
     private void ReadNominalValues()
@@ -309,9 +304,10 @@ public sealed class HidUpsReader : IUpsReader
 
     public void Dispose()
     {
-        _inputReceiver = null;
-        _parsers = null;
-        _inputReportBuffer = null;
+        _inputReceiver       = null;
+        _parsers             = null;
+        _inputReportBuffer   = null;
+        _featureReportBuffer = null;
         _stream?.Dispose();
     }
 }

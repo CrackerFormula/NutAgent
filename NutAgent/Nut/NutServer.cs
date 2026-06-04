@@ -6,7 +6,7 @@ using NutAgent.Hid;
 
 namespace NutAgent.Nut;
 
-public sealed class NutServer : IAsyncDisposable
+public sealed class NutServer
 {
     private readonly AgentConfig _config;
     private readonly Func<UpsState> _getState;
@@ -53,11 +53,5 @@ public sealed class NutServer : IAsyncDisposable
         }
 
         _logger.LogDebug("NUT client disconnected: {Endpoint}", endpoint);
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        _listener?.Stop();
-        await Task.CompletedTask;
     }
 }

@@ -39,7 +39,8 @@ internal sealed class NutSession
                 if (line == null) break;
 
                 var response = HandleCommand(line.Trim());
-                await writer.WriteLineAsync(response);
+                if (response.Length > 0)
+                    await writer.WriteLineAsync(response);
             }
         }
         catch (OperationCanceledException) { }

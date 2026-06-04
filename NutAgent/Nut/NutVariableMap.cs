@@ -14,8 +14,12 @@ public static class NutVariableMap
         // Start with everything the HID reader discovered
         var vars = new Dictionary<string, string>(state.Variables);
 
-        // Typed fields are always authoritative — override whatever HID may have put in Variables
-        vars["ups.status"]      = state.Status.ToNutString();
+        // Typed fields are always authoritative — override whatever HID may have put in Variables.
+        // Inject LB into status if charge <= threshold; covers devices that don't send a HID LB flag.
+        var statusFlags = state.Status;
+        if (state.BatteryCharge > 0 && state.BatteryCharge <= shutdownBatteryThreshold)
+            statusFlags |= UpsStatus.LowBattery;
+        vars["ups.status"]      = statusFlags.ToNutString();
         vars["battery.charge"]  = state.BatteryCharge.ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
         vars["battery.runtime"] = state.RuntimeSeconds.ToString();
 

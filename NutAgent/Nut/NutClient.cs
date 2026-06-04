@@ -117,10 +117,10 @@ public sealed class NutClient
         var line = await reader.ReadLineAsync(ct) ?? "";
 
         // Response: VAR <ups> <var> "<value>"
-        var start = line.LastIndexOf('"');
-        var end = line.IndexOf('"');
-        if (end >= 0 && start > end)
-            return line.Substring(end + 1, start - end - 1);
+        var firstQuote = line.IndexOf('"');
+        var lastQuote  = line.LastIndexOf('"');
+        if (firstQuote >= 0 && lastQuote > firstQuote)
+            return line.Substring(firstQuote + 1, lastQuote - firstQuote - 1);
 
         return "";
     }
