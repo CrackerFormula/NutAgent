@@ -50,6 +50,8 @@ public sealed class HidUpsReader : IUpsReader
 
     // Boolean usages: set or clear the corresponding UpsStatus flag.
     // ACPresent (0xD1) is handled separately because it drives two flags.
+    // Page 0x85 (Battery System) variants included for devices like Tripp Lite
+    // that report status on page 0x85 instead of the standard page 0x84.
     private static readonly Dictionary<uint, UpsStatus> StatusUsages = new()
     {
         [(0x84u << 16) | 0xD2] = UpsStatus.Charging,
@@ -58,13 +60,22 @@ public sealed class HidUpsReader : IUpsReader
         [(0x84u << 16) | 0xD8] = UpsStatus.Boosting,
         [(0x84u << 16) | 0xD9] = UpsStatus.Trimming,
         [(0x84u << 16) | 0xDB] = UpsStatus.ReplaceBattery,
+
+        [(0x85u << 16) | 0x44] = UpsStatus.Charging,
+        [(0x85u << 16) | 0x45] = UpsStatus.Discharging,
+        [(0x85u << 16) | 0x42] = UpsStatus.LowBattery,
+        [(0x85u << 16) | 0x47] = UpsStatus.LowBattery,
+        [(0x85u << 16) | 0x4B] = UpsStatus.ReplaceBattery,
     };
 
-    private const uint AcPresentUsage = (0x84u << 16) | 0xD1;
+    private const uint AcPresentUsage    = (0x84u << 16) | 0xD1;
+    private const uint AcPresentUsageAlt = (0x84u << 16) | 0x62;
 
     // -------------------------------------------------------------------------
 
     private readonly ILogger<HidUpsReader> _logger;
+    private bool                     _acPresentReceived;
+    private int                      _pollCount;
     private HidDevice?               _device;
     private HidStream?               _stream;
     private ReportDescriptor?        _descriptor;
@@ -153,6 +164,11 @@ public sealed class HidUpsReader : IUpsReader
                 }
             }
 
+            // Poll feature reports every ~30s as fallback for devices that don't send
+            // spontaneous input reports on status changes (e.g. Tripp Lite).
+            if (++_pollCount % 6 == 0)
+                ReadNominalValues();
+
             // Keep ups.status in Variables current after every read
             _lastState.Variables["ups.status"] = _lastState.Status.ToNutString();
             _lastState.LastUpdated = DateTime.UtcNow;
@@ -164,13 +180,14 @@ public sealed class HidUpsReader : IUpsReader
             _stream = null;
             _parsers = null;
             _inputReportBuffer = null;
+            _acPresentReceived = false;
             TryConnect();
         }
 
         return _lastState.Clone();
     }
 
-    private void ApplyDataValue(DataValue value)
+    private void ApplyDataValue(DataValue value, bool applyStatus = true)
     {
         foreach (uint usage in value.Usages.Select(u => (uint)u))
         {
@@ -186,20 +203,34 @@ public sealed class HidUpsReader : IUpsReader
                 else if (numMap.NutVar == "battery.runtime")
                     _lastState.RuntimeSeconds = (int)physical;
             }
-            else if (usage == AcPresentUsage)
+            else if (applyStatus && (usage == AcPresentUsage || usage == AcPresentUsageAlt))
             {
+                _acPresentReceived = true;
                 bool acPresent = value.GetLogicalValue() != 0;
                 _lastState.Status = acPresent
-                    ? (_lastState.Status | UpsStatus.OnLine)      & ~UpsStatus.OnBattery
-                    : (_lastState.Status | UpsStatus.OnBattery)   & ~UpsStatus.OnLine;
+                    ? (_lastState.Status | UpsStatus.OnLine)    & ~UpsStatus.OnBattery
+                    : (_lastState.Status | UpsStatus.OnBattery) & ~UpsStatus.OnLine;
             }
-            else if (StatusUsages.TryGetValue(usage, out var flag))
+            else if (applyStatus && StatusUsages.TryGetValue(usage, out var flag))
             {
                 if (value.GetLogicalValue() != 0)
                     _lastState.Status |= flag;
                 else
                     _lastState.Status &= ~flag;
             }
+        }
+
+        // Derive OnLine/OnBattery from Charging/Discharging flags when no explicit ACPresent
+        // usage is received. Charging implies AC is present and takes priority — some devices
+        // set both Charging and Discharging simultaneously during the AC-restore transition.
+        if (applyStatus && !_acPresentReceived)
+        {
+            if (_lastState.Status.HasFlag(UpsStatus.Charging))
+                _lastState.Status = (_lastState.Status | UpsStatus.OnLine) & ~UpsStatus.OnBattery & ~UpsStatus.Discharging;
+            else if (_lastState.Status.HasFlag(UpsStatus.Discharging))
+                _lastState.Status = (_lastState.Status | UpsStatus.OnBattery) & ~UpsStatus.OnLine;
+            else if (!_lastState.Status.HasFlag(UpsStatus.OnBattery))
+                _lastState.Status = (_lastState.Status | UpsStatus.OnLine) & ~UpsStatus.OnBattery;
         }
 
         // Derive LowBattery from charge — real devices often don't send this flag separately
@@ -230,7 +261,7 @@ public sealed class HidUpsReader : IUpsReader
                 try { _stream.GetFeature(buf); }
                 catch { continue; }
 
-                try { report.Read(buf, 0, (DataValue value) => ApplyDataValue(value)); }
+                try { report.Read(buf, 0, (DataValue value) => ApplyDataValue(value, applyStatus: false)); }
                 catch { }
             }
         }
