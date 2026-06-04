@@ -80,9 +80,74 @@ The installer:
 2. Registers service via `sc.exe`, sets failure restart actions
 3. Opens firewall port 3493 (server mode only)
 
+### Windows Deploy Checklist
+
+Follow these steps in order. Run all PowerShell commands as Administrator.
+
+**1. Check .NET 10 SDK**
+```powershell
+dotnet --list-sdks
+```
+Need a `10.x.x` entry. If missing, download from https://dot.net and install, then reopen the terminal.
+
+**2. Clone or pull the repo**
+```powershell
+# First time:
+git clone http://192.168.1.15:3000/CrackerFormula/NutAgent.git
+cd NutAgent
+
+# Already cloned:
+git pull
+```
+
+**3. Build**
+```powershell
+dotnet publish NutAgent/NutAgent.csproj -c Release
+```
+Expect output ending in `publish: ups-agent.exe`. No warnings should relate to .NET version mismatches.
+
+**4. Install**
+```powershell
+# Server mode (PC has UPS connected via USB):
+.\install\install.ps1 -Mode server
+
+# Client mode (PC shares UPS with another machine):
+.\install\install.ps1 -Mode client -RemoteHost <IP of server PC>
+```
+
+**5. Verify service started**
+```powershell
+Get-Service NutAgent
+```
+Status must be `Running`. If it stopped immediately, check Event Viewer:
+`Windows Logs → Application → Source: NutAgent`
+
+**6. Test NUT protocol** (from any machine on the network)
+```
+telnet <PC_IP> 3493
+USERNAME admin
+PASSWORD changeme
+LIST UPS
+GET VAR ups ups.status
+GET VAR ups battery.charge
+GET VAR ups battery.runtime
+LOGOUT
+```
+`ups.status` should be `OL` (online). `battery.charge` should reflect actual UPS charge.  
+If `battery.charge` returns `100` and `battery.runtime` returns `0`, the HID reader is not seeing the UPS — check USB connection and report back.
+
+**7. Change the default password**
+
+Edit `C:\NutAgent\appsettings.json` and change `"Password": "changeme"` to something real. Then restart the service:
+```powershell
+Restart-Service NutAgent
+```
+
+---
+
 ### Configure
 
-Edit `C:\NutAgent\appsettings.json` — service hot-reloads config without restart.
+Edit `C:\NutAgent\appsettings.json` — service requires restart after config changes (hot-reload not yet implemented).
 
 | Field | Default | Notes |
 |---|---|---|
