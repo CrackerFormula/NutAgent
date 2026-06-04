@@ -3,7 +3,7 @@
 ## WHAT
 
 **Stack:** .NET 10, C#, Windows x64  
-**Projects:** one (Phase 1) — NutAgent service; Tray + Shared projects are planned for Phase 3
+**Projects:** NutAgent service (Phase 1-2) + NutAgent.Tray WPF tray app (Phase 3)
 
 ```
 NutAgent/
@@ -11,27 +11,40 @@ NutAgent/
 ├── CLAUDE.md
 ├── install/
 │   └── install.ps1               # installs service, opens firewall port
-└── NutAgent/                     # Windows Service — HID + NUT protocol + shutdown
-    ├── NutAgent.csproj           # AssemblyName: ups-agent; SelfContained win-x64
-    ├── Program.cs
-    ├── Worker.cs
-    ├── appsettings.json
-    ├── Config/
-    │   └── AgentConfig.cs
-    ├── Hid/
-    │   ├── IUpsReader.cs
-    │   ├── HidUpsReader.cs       # USB HID Power Device reader (HidSharp 2.1.0)
-    │   ├── DischargeTracker.cs   # rolling discharge rate + runtime estimate
-    │   └── UpsState.cs
+├── NutAgent/                     # Windows Service — HID + NUT protocol + shutdown
+│   ├── NutAgent.csproj           # AssemblyName: ups-agent; SelfContained win-x64
+│   ├── Program.cs
+│   ├── Worker.cs
+│   ├── appsettings.json
+│   ├── Config/
+│   │   └── AgentConfig.cs
+│   ├── Hid/
+│   │   ├── IUpsReader.cs
+│   │   ├── HidUpsReader.cs       # USB HID Power Device reader (HidSharp 2.1.0)
+│   │   ├── DischargeTracker.cs   # rolling discharge rate + runtime estimate
+│   │   └── UpsState.cs
+│   ├── Ipc/
+│   │   └── PipeServer.cs         # named pipe IPC for tray app (\\.\pipe\nutagent)
+│   ├── Nut/
+│   │   ├── NutVariableMap.cs
+│   │   ├── NutSession.cs
+│   │   ├── NutServer.cs
+│   │   └── NutClient.cs
+│   └── Shutdown/
+│       └── ShutdownManager.cs    # charge % OR runtime minutes threshold
+└── NutAgent.Tray/                # WPF tray app — status icon + settings UI
+    ├── NutAgent.Tray.csproj      # AssemblyName: ups-tray; WPF + WinForms
+    ├── App.xaml / App.xaml.cs    # single-instance guard, no main window
+    ├── Models.cs                 # StatusResponse, TrayConfig, SetConfigResult
+    ├── TrayManager.cs            # NotifyIcon lifecycle, icon states, menu
+    ├── SettingsWindow.xaml/.cs   # mode + thresholds settings window
     ├── Ipc/
-    │   └── PipeServer.cs         # named pipe IPC for tray app (\\.\pipe\nutagent)
-    ├── Nut/
-    │   ├── NutVariableMap.cs
-    │   ├── NutSession.cs
-    │   ├── NutServer.cs
-    │   └── NutClient.cs
-    └── Shutdown/
-        └── ShutdownManager.cs    # charge % OR runtime minutes threshold
+    │   └── PipeClient.cs         # status/getConfig/setConfig over named pipe
+    └── Resources/
+        ├── icon_online.ico       # green  — OL
+        ├── icon_onbattery.ico    # yellow — OB
+        ├── icon_lowbattery.ico   # red    — LB / critical
+        └── icon_disconnected.ico # grey   — service not running
 ```
 
 ---
@@ -270,7 +283,7 @@ double minutesToEmpty   = tracker.MinutesToEmpty;           // e.g. 170 min
 |---|---|---|
 | **1** | ✅ Done | Service scaffold, NUT protocol, HID reader stub, basic shutdown |
 | **2** | ✅ Done | ~~runtime threshold~~ ✅; ~~validate HidUpsReader~~ ✅; ~~DischargeTracker~~ ✅; ~~PipeServer~~ ✅; ~~config hot-reload~~ ✅ |
-| **3** | 🔲 | `NutAgent.Shared`, `NutAgent.Tray` — WPF tray icon + settings window |
+| **3** | ✅ Done | ~~NutAgent.Tray~~ ✅ — WPF tray icon (4 states) + settings window + PipeClient |
 | **4** | 🔲 | Auto mode — `DischargeTracker` drives dynamic shutdown threshold |
 
 ---
