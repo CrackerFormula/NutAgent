@@ -2,56 +2,86 @@
 
 ## WHAT
 
-**Stack:** .NET 8 Worker Service, C#, HidSharp (NuGet), Windows Service host  
-**Target:** Windows x64 only (win-x64 self-contained single exe)  
-**Output:** `ups-agent.exe` — one binary, two modes
+**Stack:** .NET 8, C#, Windows x64  
+**Projects:** three — Service (core), Tray (WPF UI), Shared (IPC types)
 
 ```
 NutAgent/
 ├── NutAgent.sln
 ├── CLAUDE.md
 ├── install/
-│   └── install.ps1          # installs/registers Windows service
-└── NutAgent/
-    ├── NutAgent.csproj
-    ├── Program.cs            # host builder, DI, Windows service hook
-    ├── Worker.cs             # BackgroundService — wires mode branches
-    ├── appsettings.json      # all config (mode, port, users, thresholds)
-    ├── Config/
-    │   └── AgentConfig.cs    # typed config model
-    ├── Hid/
-    │   ├── IUpsReader.cs     # interface: Read() + IsConnected
-    │   ├── HidUpsReader.cs   # HID Power Device class reader (HidSharp)
-    │   └── UpsState.cs       # data model + UpsStatus flags + ToNutString()
-    ├── Nut/
-    │   ├── NutVariableMap.cs # maps UpsState → NUT variable names/values
-    │   ├── NutSession.cs     # one TCP client session, NUT text protocol
-    │   ├── NutServer.cs      # TcpListener, spawns NutSession per connection
-    │   └── NutClient.cs      # polls remote NUT server, triggers shutdown
-    └── Shutdown/
-        └── ShutdownManager.cs # schedules/cancels graceful Windows shutdown
+│   └── install.ps1               # installs service + registers tray at login
+├── NutAgent.Service/             # Windows Service: HID + NUT protocol + shutdown + pipe server
+│   ├── NutAgent.Service.csproj
+│   ├── Program.cs
+│   ├── Worker.cs
+│   ├── appsettings.json
+│   ├── Config/
+│   │   └── AgentConfig.cs
+│   ├── Hid/
+│   │   ├── IUpsReader.cs
+│   │   ├── HidUpsReader.cs       # USB HID Power Device reader (HidSharp)
+│   │   ├── FakeUpsReader.cs      # canned data for dev/testing
+│   │   └── UpsState.cs
+│   ├── Nut/
+│   │   ├── NutVariableMap.cs
+│   │   ├── NutSession.cs
+│   │   ├── NutServer.cs
+│   │   └── NutClient.cs
+│   ├── Shutdown/
+│   │   └── ShutdownManager.cs    # charge % OR runtime minutes threshold
+│   ├── Tracking/
+│   │   └── DischargeTracker.cs   # circular buffer → discharge rate (v2 Auto mode)
+│   └── Ipc/
+│       └── PipeServer.cs         # named pipe \\.\pipe\nutagent
+├── NutAgent.Tray/                # WPF tray app — optional UI layer
+│   ├── NutAgent.Tray.csproj
+│   ├── App.xaml / App.xaml.cs
+│   ├── Ipc/
+│   │   └── PipeClient.cs         # polls pipe every 5s for status
+│   ├── ViewModels/
+│   │   ├── TrayViewModel.cs      # icon state + menu text
+│   │   └── SettingsViewModel.cs  # two-way config bindings
+│   ├── Views/
+│   │   └── SettingsWindow.xaml
+│   └── Assets/
+│       ├── icon-online.ico       # green
+│       ├── icon-battery.ico      # yellow
+│       ├── icon-low.ico          # red
+│       └── icon-disconnected.ico # grey
+└── NutAgent.Shared/              # IPC types — referenced by both Service and Tray
+    ├── NutAgent.Shared.csproj
+    ├── Ipc/
+    │   ├── StatusResponse.cs
+    │   ├── ConfigResponse.cs
+    │   └── ConfigUpdateRequest.cs
+    └── Enums/
+        └── ShutdownMode.cs       # Manual | Auto
 ```
 
 ---
 
 ## WHY
 
-The Windows port of NUT (Network UPS Tools) requires manual driver replacement via Zadig, has no real installer, and breaks on Windows updates. This project replaces the NUT server component with a proper Windows service that speaks the standard NUT protocol — so Home Assistant, Unraid's native NUT client, and any other NUT tool work without modification.
+The Windows port of NUT requires manual driver replacement via Zadig and breaks on Windows updates. NutAgent replaces it with a proper Windows service that speaks the standard NUT protocol — so Home Assistant, Unraid's native NUT client, and any other NUT tool work without modification.
+
+The optional WPF tray app provides a settings UI. The service runs independently — closing the tray does not affect monitoring. The SCM acts as the watchdog: if the service crashes it restarts automatically.
 
 ### Deployment topology
 
 ```
-UPS A (USB→ PC1) → ups-agent --mode server :3493
-         PC2     → ups-agent --mode client → watches PC1
+UPS A (USB→ PC1) → NutAgent.Service --mode server :3493
+         PC2     → NutAgent.Service --mode client → watches PC1
 
-UPS B (USB→ PC3) → ups-agent --mode server :3493
-UPS C (USB→ PC4) → ups-agent --mode server :3493
+UPS B (USB→ PC3) → NutAgent.Service --mode server :3493
+UPS C (USB→ PC4) → NutAgent.Service --mode server :3493
 
 UPS D (USB→ Unraid) → native NUT server :3493
          HA          → native NUT integration → connects to all 4 servers
 ```
 
-PC2 doesn't have a USB connection to its UPS — it runs in client mode, monitoring PC1's NUT server and handling its own shutdown.
+PC2 shares UPS A with PC1 but has no USB — it monitors PC1's NUT server and shuts itself down.  
+Unraid + HA share UPS D — use native NUT, not NutAgent.
 
 ---
 
@@ -60,12 +90,11 @@ PC2 doesn't have a USB connection to its UPS — it runs in client mode, monitor
 ### Build
 
 ```powershell
-# On the target Windows machine or cross-compiled from Mac:
-dotnet publish NutAgent/NutAgent.csproj -c Release
-# Output: NutAgent/bin/Release/net8.0-windows/win-x64/publish/ups-agent.exe
+dotnet publish NutAgent.Service/NutAgent.Service.csproj -c Release
+dotnet publish NutAgent.Tray/NutAgent.Tray.csproj -c Release
 ```
 
-### Install (run as Administrator on each Windows PC)
+### Install (run as Administrator)
 
 ```powershell
 # Server mode (PC1, PC3, PC4):
@@ -73,40 +102,47 @@ dotnet publish NutAgent/NutAgent.csproj -c Release
 
 # Client mode (PC2):
 .\install\install.ps1 -Mode client -RemoteHost 192.168.1.10
+
+# With tray app:
+.\install\install.ps1 -Mode server -InstallTray
 ```
 
 The installer:
-1. Copies `ups-agent.exe` and `appsettings.json` to `C:\NutAgent\`
-2. Patches `appsettings.json` for the correct mode/remote host
-3. Registers and starts the Windows service
+1. Copies `NutAgent.Service.exe` + `appsettings.json` to `C:\NutAgent\`
+2. Registers service via `sc.exe`, sets failure restart actions
+3. Optionally copies `NutAgent.Tray.exe`, adds to `HKCU\...\Run`
 4. Opens firewall port 3493 (server mode only)
 
 ### Configure
 
-Edit `C:\NutAgent\appsettings.json` then restart the service (`Restart-Service NutAgent`).
+Edit `C:\NutAgent\appsettings.json` — service hot-reloads config without restart.
 
-Key fields:
 | Field | Default | Notes |
 |---|---|---|
 | `Agent.Mode` | `Server` | `Server` or `Client` |
-| `Agent.UpsName` | `ups` | Name reported to NUT clients |
+| `Agent.UpsName` | `ups` | NUT UPS name |
 | `Agent.Port` | `3493` | NUT protocol port |
-| `Agent.Users` | `[{admin/changeme}]` | Auth — change password |
-| `Agent.RemoteHost` | `""` | Client mode: IP of NUT server |
-| `Agent.RemoteUpsName` | `ups` | Client mode: UPS name on remote |
+| `Agent.Users` | `[{admin/changeme}]` | Change password |
+| `Agent.RemoteHost` | `""` | Client mode: server IP |
+| `Agent.RemoteUpsName` | `ups` | Client mode: remote UPS name |
 | `Agent.ShutdownBatteryThreshold` | `20` | Shutdown below this % |
+| `Agent.ShutdownRuntimeMinutes` | `5` | Shutdown below this many minutes |
 | `Agent.ShutdownDelaySeconds` | `60` | Grace period before shutdown |
+| `Agent.ShutdownMode` | `Manual` | `Manual` or `Auto` (v4) |
+| `Agent.SafetyMarginMinutes` | `3` | Auto mode safety buffer (v4) |
 | `Agent.PollIntervalSeconds` | `30` | Client poll frequency |
+
+Shutdown triggers on **whichever comes first**: charge % threshold OR runtime minutes threshold.
 
 ### Logs
 
-Windows Event Viewer → Windows Logs → Application → Source: `NutAgent UPS Agent`
+Windows Event Viewer → Windows Logs → Application → Source: `NutAgent`
 
 ### Verify with HA
 
-In HA, add a NUT integration pointing to `<PC_IP>:3493` with the configured credentials. Variables like `battery.charge`, `ups.status`, and `battery.runtime` should populate immediately.
+Add a NUT integration in HA pointing to `<PC_IP>:3493`. Variables `battery.charge`, `ups.status`, `battery.runtime` should populate immediately.
 
-### Manual NUT protocol test (from any machine with netcat)
+### Manual NUT protocol test
 
 ```bash
 nc 192.168.1.x 3493
@@ -120,37 +156,98 @@ LOGOUT
 
 ---
 
-## Implementation Plan
+## IPC — Named Pipe
 
-### Phase 1 — Core (current)
-- [x] Project scaffold: solution, csproj, directory layout
-- [x] `AgentConfig` typed config
-- [x] `UpsState` model + `UpsStatus` flags
-- [x] `NutVariableMap` — state → NUT variable names
-- [x] `NutSession` — full NUT text protocol (LIST UPS, LIST VAR, GET VAR, GET TYPE, GET DESC, auth)
-- [x] `NutServer` — TCP listener, spawns session per connection
-- [x] `NutClient` — polls remote, triggers shutdown
-- [x] `ShutdownManager` — `shutdown.exe /s /t 0 /f` with delay + cancel
-- [x] `Worker` — wires server or client branch
-- [x] `Program.cs` — host builder + `UseWindowsService()`
-- [x] `install.ps1` — service install, firewall, config patch
+Pipe name: `\\.\pipe\nutagent`  
+Transport: JSON lines, one request → one response.
 
-### Phase 2 — HID reading (next)
-The HID UPS reader scaffold is in place. The core loop is correct. What needs real testing:
+```
+→ {"type":"status"}
+← {"charge":85,"runtimeSeconds":1800,"status":"OL","load":42,"isConnected":true,"model":"Back-UPS 1500"}
 
-**Finding the device:**  
-`HidUpsReader.FindUpsDevice()` scans for a device whose top-level usage page is `0x84` (Power Device). Most compliant UPS devices declare this. If a specific UPS isn't found, add its VendorId/ProductId as a fallback filter.
+→ {"type":"getConfig"}
+← { ...full AgentConfig as JSON... }
 
-**Reading values:**  
-The `HidDeviceInputReceiver` approach in `ApplyDataValue()` handles standard HID input reports. However, some UPS values (nominal voltage, manufacturer string) are in **feature reports** — the `ReadNominalValues()` method needs fleshing out per-device once tested.
+→ {"type":"setConfig","shutdownBatteryThreshold":15,"shutdownRuntimeMinutes":3}
+← {"ok":true}
+```
 
-**Status bitmask:**  
-The current implementation derives `OnBattery` from `ACPresent=false`. Some UPS devices report a combined `PresentStatus` bitmask usage (`0x85D0`). Add handling for this if individual bit usages aren't working.
+Tray polls status every 5 seconds. Config writes immediately restart the relevant service components.
 
-**Testing HID without a UPS:**  
-Add a `FakeUpsReader : IUpsReader` that returns canned data. Wire it in when no HID device is found, so the NUT server still responds during development.
+---
 
-**HID usage constants to verify:**  
+## Tray Icon States
+
+| Icon | Colour | Condition |
+|---|---|---|
+| Online | Green | `OL`, charge above thresholds |
+| On Battery | Yellow | `OB` |
+| Low / Shutdown Imminent | Red | `LB`, or charge ≤ threshold, or runtime ≤ threshold |
+| Disconnected | Grey | Pipe not responding (service down) |
+
+**Right-click menu:**
+```
+● Online — 85% — ~30 min
+─────────────────────────
+  Settings...
+─────────────────────────
+  Exit
+```
+
+**Settings window:**
+```
+Mode:  ● Server  ○ Client
+
+[Server]                        [Client]
+UPS Name:  [ups      ]          Remote Host: [192.168.1.x]
+Port:      [3493     ]          Remote Port: [3493       ]
+                                Remote UPS:  [ups        ]
+
+─────────────────────────────────────────
+Shutdown when:
+  Battery below   [20] %
+  Runtime below   [ 5] minutes
+  (whichever comes first)
+
+Shutdown delay:   [60] seconds
+─────────────────────────────────────────
+                        [Save]  [Cancel]
+```
+
+---
+
+## DischargeTracker
+
+Circular buffer of the last 20 charge readings (100s at 5s poll interval).
+
+```csharp
+tracker.Record(charge: 85.0, timestamp: now);
+double ratePerMinute    = tracker.DischargeRatePerMinute;  // e.g. 0.5%/min
+double minutesToEmpty   = tracker.MinutesToEmpty;           // e.g. 170 min
+```
+
+**v1–v3:** populated continuously, not used for decisions.  
+**v4 Auto mode:** if `ShutdownMode == Auto`, ShutdownManager uses `MinutesToEmpty - SafetyMarginMinutes` as the dynamic runtime threshold instead of the fixed `ShutdownRuntimeMinutes` value.
+
+---
+
+## Phase Roadmap
+
+| Phase | Status | Scope |
+|---|---|---|
+| **1** | ✅ Done | Service scaffold, NUT protocol, HID reader stub, basic shutdown |
+| **2** | 🔲 Next | `FakeUpsReader`, runtime threshold, `DischargeTracker`, `PipeServer`, config hot-reload |
+| **3** | 🔲 | `NutAgent.Shared`, `NutAgent.Tray` — WPF tray icon + settings window |
+| **4** | 🔲 | Auto mode — `DischargeTracker` drives dynamic shutdown threshold |
+
+---
+
+## HID Reader Notes (Phase 2)
+
+`HidUpsReader.FindUpsDevice()` scans for a device with top-level Usage Page `0x84` (Power Device). If not found, `FakeUpsReader` is used automatically so the NUT server still responds.
+
+**Usage constants to verify against real device:**
+
 | Variable | Page | Usage | Combined |
 |---|---|---|---|
 | RemainingCapacity | 0x85 | 0x66 | `0x00850066` |
@@ -163,18 +260,11 @@ Add a `FakeUpsReader : IUpsReader` that returns canned data. Wire it in when no 
 | Discharging | 0x84 | 0xD3 | `0x008400D3` |
 | Need Replacement | 0x84 | 0xDB | `0x008400DB` |
 
-### Phase 3 — Polish
-- [ ] `FakeUpsReader` for dev/testing without a physical UPS
-- [ ] `appsettings.Development.json` with fake reader wired
-- [ ] Unit tests for `NutSession` protocol parsing (no TCP needed — use `MemoryStream`)
-- [ ] Uninstall script (`uninstall.ps1`)
-- [ ] Config validation on startup (warn if password is still `changeme`)
+Use `hidapitester --list-detail` on a Windows machine with the UPS attached to dump the actual report descriptor and verify offsets before writing real parsing code.
 
 ---
 
 ## NUT Protocol Reference
-
-NutAgent implements the subset needed by Home Assistant and upsmon:
 
 | Command | Response |
 |---|---|
@@ -184,8 +274,8 @@ NutAgent implements the subset needed by Home Assistant and upsmon:
 | `LOGOUT` | `OK Goodbye` |
 | `LIST UPS` | `BEGIN LIST UPS … END LIST UPS` |
 | `LIST VAR <ups>` | `BEGIN LIST VAR … END LIST VAR` |
-| `LIST RW <ups>` | empty (no writable vars) |
-| `LIST CMD <ups>` | empty (no commands) |
+| `LIST RW <ups>` | empty |
+| `LIST CMD <ups>` | empty |
 | `GET VAR <ups> <var>` | `VAR <ups> <var> "<value>"` |
 | `GET TYPE <ups> <var>` | `TYPE <ups> <var> STRING:256` or `INTEGER` |
 | `GET DESC <ups> <var>` | `DESC <ups> <var> "<description>"` |
