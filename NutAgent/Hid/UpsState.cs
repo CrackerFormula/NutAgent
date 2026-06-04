@@ -17,6 +17,8 @@ public class UpsState
     public int VendorId { get; set; }
     public int ProductId { get; set; }
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
+
+    public UpsState Clone() => (UpsState)MemberwiseClone();
 }
 
 [Flags]

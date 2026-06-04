@@ -15,6 +15,7 @@ internal sealed class NutSession
     private readonly ILogger _logger;
 
     private string? _authenticatedUser;
+    private bool _passwordVerified;
     private bool _loggedIn;
 
     public NutSession(TcpClient client, AgentConfig config, Func<UpsState> getState, ILogger logger)
@@ -78,6 +79,7 @@ internal sealed class NutSession
             u.Username.Equals(parts[1], StringComparison.OrdinalIgnoreCase));
         if (user == null) return "ERR ACCESS-DENIED";
         _authenticatedUser = parts[1];
+        _passwordVerified = false;
         return "OK";
     }
 
@@ -87,13 +89,14 @@ internal sealed class NutSession
         var user = _config.Users.FirstOrDefault(u =>
             u.Username.Equals(_authenticatedUser, StringComparison.OrdinalIgnoreCase));
         if (user == null || user.Password != parts[1]) return "ERR ACCESS-DENIED";
+        _passwordVerified = true;
         return "OK";
     }
 
     private string HandleLogin(string[] parts)
     {
         if (parts.Length < 2) return "ERR INVALID-ARGUMENT";
-        if (_authenticatedUser == null) return "ERR ACCESS-DENIED";
+        if (!_passwordVerified) return "ERR ACCESS-DENIED";
         if (!parts[1].Equals(_config.UpsName, StringComparison.OrdinalIgnoreCase))
             return "ERR UNKNOWN-UPS";
         _loggedIn = true;

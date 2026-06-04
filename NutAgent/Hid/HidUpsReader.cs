@@ -109,7 +109,7 @@ public sealed class HidUpsReader : IUpsReader
             TryConnect();
         }
 
-        return _lastState;
+        return _lastState.Clone();
     }
 
     private void ApplyDataValue(DataValue value)
