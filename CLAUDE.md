@@ -201,7 +201,7 @@ double minutesToEmpty   = tracker.MinutesToEmpty;           // e.g. 170 min
 | Phase | Status | Scope |
 |---|---|---|
 | **1** | ✅ Done | Service scaffold, NUT protocol, HID reader stub, basic shutdown |
-| **2** | 🔧 In progress | ~~runtime threshold~~ ✅; `FakeUpsReader`, `DischargeTracker`, `PipeServer`, config hot-reload |
+| **2** | 🔧 In progress | ~~runtime threshold~~ ✅; validate HidUpsReader on real hardware, `DischargeTracker`, `PipeServer`, config hot-reload |
 | **3** | 🔲 | `NutAgent.Shared`, `NutAgent.Tray` — WPF tray icon + settings window |
 | **4** | 🔲 | Auto mode — `DischargeTracker` drives dynamic shutdown threshold |
 
