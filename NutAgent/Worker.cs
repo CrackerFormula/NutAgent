@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NutAgent.Config;
 using NutAgent.Hid;
+using NutAgent.Ipc;
 using NutAgent.Nut;
 using NutAgent.Shutdown;
 
@@ -77,7 +78,8 @@ public sealed class Worker : BackgroundService
         }, ct);
 
         var server = new NutServer(_config, GetState, _loggerFactory.CreateLogger<NutServer>());
-        await Task.WhenAll(readLoop, server.RunAsync(ct));
+        var pipe   = new PipeServer(GetState, _config, _loggerFactory.CreateLogger<PipeServer>());
+        await Task.WhenAll(readLoop, server.RunAsync(ct), pipe.RunAsync(ct));
     }
 
     private async Task RunClientAsync(CancellationToken ct)
