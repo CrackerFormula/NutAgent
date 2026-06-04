@@ -59,7 +59,7 @@ public sealed class Worker : BackgroundService
                     shutdown.CancelShutdown();
                 }
 
-                await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                await Task.Delay(TimeSpan.FromSeconds(2), ct);
             }
         }, ct);
 

@@ -164,10 +164,10 @@ public sealed class HidUpsReader : IUpsReader
                 }
             }
 
-            // Poll feature reports every ~10s as fallback for devices that don't send
-            // spontaneous input reports on status changes (e.g. Tripp Lite).
-            if (++_pollCount % 2 == 0)
-                ReadNominalValues();
+            // Poll feature reports every read cycle — authoritative status source for devices
+            // (e.g. Tripp Lite) that don't send spontaneous input reports on state changes.
+            ++_pollCount;
+            ReadNominalValues();
 
             // Keep ups.status in Variables current after every read
             _lastState.Variables["ups.status"] = _lastState.Status.ToNutString();
