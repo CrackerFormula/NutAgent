@@ -65,11 +65,13 @@ public sealed class HidUpsReader : IUpsReader
     // -------------------------------------------------------------------------
 
     private readonly ILogger<HidUpsReader> _logger;
-    private HidDevice?              _device;
-    private HidStream?              _stream;
-    private ReportDescriptor?       _descriptor;
-    private DeviceItem[]?           _deviceItems;
-    private HidDeviceInputReceiver? _inputReceiver;
+    private HidDevice?               _device;
+    private HidStream?               _stream;
+    private ReportDescriptor?        _descriptor;
+    private DeviceItem[]?            _deviceItems;
+    private HidDeviceInputReceiver?  _inputReceiver;
+    private byte[]?                  _inputReportBuffer;
+    private DeviceItemInputParser[]? _parsers;
     private UpsState _lastState = new();
 
     public bool IsConnected => _stream != null;
@@ -98,7 +100,9 @@ public sealed class HidUpsReader : IUpsReader
 
             _descriptor  = _device.GetReportDescriptor();
             _deviceItems = _descriptor.DeviceItems.ToArray();
-            _inputReceiver = _descriptor.CreateHidDeviceInputReceiver();
+            _inputReceiver     = _descriptor.CreateHidDeviceInputReceiver();
+            _inputReportBuffer = new byte[_device.GetMaxInputReportLength()];
+            _parsers           = _deviceItems.Select(item => item.CreateDeviceItemInputParser()).ToArray();
             _inputReceiver.Start(_stream);
 
             // Identity from USB string descriptors
@@ -130,7 +134,7 @@ public sealed class HidUpsReader : IUpsReader
 
     public UpsState Read()
     {
-        if (_stream == null || _inputReceiver == null || _deviceItems == null)
+        if (_stream == null || _inputReceiver == null || _deviceItems == null || _parsers == null || _inputReportBuffer == null)
         {
             TryConnect();
             return _lastState.Clone();
@@ -138,9 +142,16 @@ public sealed class HidUpsReader : IUpsReader
 
         try
         {
-            DataValue value;
-            while (_inputReceiver.TryRead(_deviceItems, 0, out value))
-                ApplyDataValue(value);
+            Report report;
+            while (_inputReceiver.TryRead(_inputReportBuffer, 0, out report))
+            {
+                for (int i = 0; i < _parsers.Length; i++)
+                {
+                    if (!_parsers[i].TryParseReport(_inputReportBuffer, 0, report)) continue;
+                    for (int j = 0; j < _parsers[i].ValueCount; j++)
+                        ApplyDataValue(_parsers[i].GetValue(j));
+                }
+            }
 
             // Keep ups.status in Variables current after every read
             _lastState.Variables["ups.status"] = _lastState.Status.ToNutString();
@@ -151,6 +162,8 @@ public sealed class HidUpsReader : IUpsReader
             _logger.LogWarning(ex, "HID read error — attempting reconnect");
             _stream?.Dispose();
             _stream = null;
+            _parsers = null;
+            _inputReportBuffer = null;
             TryConnect();
         }
 
@@ -239,6 +252,8 @@ public sealed class HidUpsReader : IUpsReader
     public void Dispose()
     {
         _inputReceiver = null;
+        _parsers = null;
+        _inputReportBuffer = null;
         _stream?.Dispose();
     }
 }
