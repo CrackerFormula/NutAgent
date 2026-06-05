@@ -1,6 +1,6 @@
 namespace NutAgent.Tray;
 
-record StatusResponse(
+public record StatusResponse(
     double  Charge,
     int     RuntimeSeconds,
     int?    RuntimeEst,
@@ -10,7 +10,7 @@ record StatusResponse(
     string  Model,
     string  Manufacturer);
 
-class TrayConfig
+public class TrayConfig
 {
     public string Mode                     { get; set; } = "Server";
     public string UpsName                  { get; set; } = "ups";
@@ -27,4 +27,4 @@ class TrayConfig
     public int    PollIntervalSeconds      { get; set; } = 30;
 }
 
-record SetConfigResult(bool Ok, bool RequiresRestart = false);
+public record SetConfigResult(bool Ok, bool RequiresRestart = false);

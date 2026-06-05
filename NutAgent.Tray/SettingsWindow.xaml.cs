@@ -85,29 +85,43 @@ public partial class SettingsWindow : Window
     private bool TryBuildConfig(out TrayConfig? config)
     {
         config = null;
+        bool isServer = ServerRadio.IsChecked == true;
 
-        if (!int.TryParse(PortBox.Text.Trim(),          out int port)    ||
-            !int.TryParse(RemotePortBox.Text.Trim(),     out int rport)   ||
-            !int.TryParse(ChargeThreshBox.Text.Trim(),   out int charge)  ||
-            !int.TryParse(RuntimeThreshBox.Text.Trim(),  out int runtime) ||
-            !int.TryParse(ShutdownDelayBox.Text.Trim(),  out int delay))
+        // Validate the port field for the active mode only; preserve the other from original.
+        int activePort;
+        if (isServer)
         {
-            MessageBox.Show("Please enter valid whole numbers in all numeric fields.",
-                "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return false;
+            if (!int.TryParse(PortBox.Text.Trim(), out activePort))
+            {
+                ShowNumericError(); return false;
+            }
+        }
+        else
+        {
+            if (!int.TryParse(RemotePortBox.Text.Trim(), out activePort))
+            {
+                ShowNumericError(); return false;
+            }
+        }
+
+        if (!int.TryParse(ChargeThreshBox.Text.Trim(),  out int charge)  ||
+            !int.TryParse(RuntimeThreshBox.Text.Trim(), out int runtime) ||
+            !int.TryParse(ShutdownDelayBox.Text.Trim(), out int delay))
+        {
+            ShowNumericError(); return false;
         }
 
         config = new TrayConfig
         {
-            Mode                     = ServerRadio.IsChecked == true ? "Server" : "Client",
+            Mode                     = isServer ? "Server" : "Client",
             UpsName                  = UpsNameBox.Text.Trim(),
-            UpsDescription           = _original?.UpsDescription   ?? "UPS",
-            Port                     = port,
+            UpsDescription           = _original?.UpsDescription ?? "UPS",
+            Port                     = isServer  ? activePort : (_original?.Port ?? 3493),
             RemoteHost               = RemoteHostBox.Text.Trim(),
-            RemotePort               = rport,
+            RemotePort               = !isServer ? activePort : (_original?.RemotePort ?? 3493),
             RemoteUpsName            = RemoteUpsBox.Text.Trim(),
-            RemoteUsername           = _original?.RemoteUsername    ?? "",
-            RemotePassword           = _original?.RemotePassword    ?? "",
+            RemoteUsername           = _original?.RemoteUsername ?? "",
+            RemotePassword           = _original?.RemotePassword ?? "",
             ShutdownBatteryThreshold = charge,
             ShutdownRuntimeMinutes   = runtime,
             ShutdownDelaySeconds     = delay,
@@ -115,4 +129,8 @@ public partial class SettingsWindow : Window
         };
         return true;
     }
+
+    private static void ShowNumericError() =>
+        MessageBox.Show("Please enter valid whole numbers in all numeric fields.",
+            "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
 }

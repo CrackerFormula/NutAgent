@@ -1,6 +1,9 @@
 using System.IO.Pipes;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using NutAgent.Config;
 using NutAgent.Hid;
@@ -16,7 +19,8 @@ public sealed class PipeServer
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters           = { new JsonStringEnumConverter() },
     };
 
     private readonly Func<UpsState>      _getState;
@@ -40,9 +44,17 @@ public sealed class PipeServer
         {
             try
             {
-                using var pipe = new NamedPipeServerStream(
+                // Allow any local user to connect — service runs as SYSTEM and would
+                // otherwise block user-session clients like the tray app.
+                var security = new PipeSecurity();
+                security.AddAccessRule(new PipeAccessRule(
+                    new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null),
+                    PipeAccessRights.ReadWrite,
+                    AccessControlType.Allow));
+
+                using var pipe = NamedPipeServerStreamAcl.Create(
                     PipeName, PipeDirection.InOut, 1,
-                    PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                    PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0, security);
 
                 await pipe.WaitForConnectionAsync(ct);
 
