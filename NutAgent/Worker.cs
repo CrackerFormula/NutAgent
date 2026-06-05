@@ -93,7 +93,13 @@ public sealed class Worker : BackgroundService
 
                 await Task.WhenAny(serverTask, triggerTask);
                 serverCts.Cancel();
-                try { await serverTask; } catch (OperationCanceledException) { }
+                try { await serverTask; }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "NUT server error — restarting in 2s");
+                    await Task.Delay(2000, ct).ConfigureAwait(false);
+                }
 
                 if (triggerTask.IsCompletedSuccessfully && !ct.IsCancellationRequested)
                     _logger.LogInformation("NUT server restarting on port {Port}", _config.Port);
