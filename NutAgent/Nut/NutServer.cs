@@ -23,6 +23,7 @@ public sealed class NutServer
     public async Task RunAsync(CancellationToken ct)
     {
         _listener = new TcpListener(IPAddress.Any, _config.Port);
+        _listener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
         _listener.Start();
         _logger.LogInformation("NUT server listening on port {Port}", _config.Port);
 
