@@ -1,7 +1,7 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Installs ups-agent.exe as a Windows service.
+    Installs ups-agent.exe as a Windows service and optionally the tray app.
 
 .PARAMETER Mode
     server  — reads local UPS via USB, serves NUT protocol on port 3493
@@ -10,9 +10,12 @@
 .PARAMETER RemoteHost
     (client mode) IP of the NUT server to monitor
 
+.PARAMETER InstallTray
+    Also install ups-tray.exe to C:\NutAgent\ and add it to Windows startup
+
 .EXAMPLE
-    # Server (PC1, PC3, PC4):
-    .\install.ps1 -Mode server
+    # Server with tray app:
+    .\install.ps1 -Mode server -InstallTray
 
     # Client (PC2, sharing UPS with PC1):
     .\install.ps1 -Mode client -RemoteHost 192.168.1.10
@@ -24,7 +27,8 @@ param(
 
     [string]$RemoteHost = "",
     [string]$InstallDir = "C:\NutAgent",
-    [string]$ServiceName = "NutAgent"
+    [string]$ServiceName = "NutAgent",
+    [switch]$InstallTray
 )
 
 $ErrorActionPreference = "Stop"
@@ -80,6 +84,29 @@ if ($Mode -eq "server") {
     Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
     New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol TCP -LocalPort 3493 -Action Allow | Out-Null
     Write-Host "Firewall rule added for port 3493"
+}
+
+if ($InstallTray) {
+    $sourceTray = Join-Path $scriptDir "..\NutAgent.Tray\bin\Release\net10.0-windows\publish\ups-tray.exe"
+    if (-not (Test-Path $sourceTray)) {
+        Write-Warning "ups-tray.exe not found at $sourceTray — skipping tray install."
+        Write-Warning "Run: dotnet publish NutAgent.Tray/NutAgent.Tray.csproj -c Release"
+    } else {
+        # Kill running tray before overwriting
+        Get-Process -Name "ups-tray" -ErrorAction SilentlyContinue | Stop-Process -Force
+
+        Copy-Item $sourceTray $InstallDir -Force
+        $trayExe = Join-Path $InstallDir "ups-tray.exe"
+
+        # Add to current user's startup
+        $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+        Set-ItemProperty -Path $runKey -Name "NutAgentTray" -Value "`"$trayExe`""
+
+        # Launch tray now
+        Start-Process $trayExe
+
+        Write-Host "Tray app installed and launched. Will auto-start on login."
+    }
 }
 
 Write-Host ""

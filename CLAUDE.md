@@ -78,17 +78,25 @@ Unraid + HA share UPS D — use native NUT, not NutAgent.
 ### Build
 
 ```powershell
+# Service only:
 dotnet publish NutAgent/NutAgent.csproj -c Release
+
+# Service + tray app:
+dotnet publish NutAgent/NutAgent.csproj -c Release
+dotnet publish NutAgent.Tray/NutAgent.Tray.csproj -c Release
 ```
 
 ### Install (run as Administrator)
 
 ```powershell
-# Server mode (PC1, PC3, PC4):
-.\install\install.ps1 -Mode server
+# Server mode with tray app (PC1, PC3, PC4):
+.\install\install.bat -Mode server -InstallTray
+
+# Server mode, service only:
+.\install\install.bat -Mode server
 
 # Client mode (PC2):
-.\install\install.ps1 -Mode client -RemoteHost 192.168.1.10
+.\install\install.bat -Mode client -RemoteHost 192.168.1.10
 ```
 
 The installer:
