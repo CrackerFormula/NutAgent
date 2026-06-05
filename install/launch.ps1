@@ -28,5 +28,11 @@ if ($RemoteHost) {
     & $installScript -Mode $Mode -InstallTray:$InstallTray
 }
 
+if ($InstallTray) {
+    Write-Host ""
+    Write-Host ">>> Launch the tray app now: C:\NutAgent\ups-tray.exe" -ForegroundColor Cyan
+    Write-Host "    It will auto-start on every login from here on." -ForegroundColor Cyan
+}
+
 Write-Host ""
 Read-Host "Press Enter to close"
