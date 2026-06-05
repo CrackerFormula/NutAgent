@@ -127,16 +127,17 @@ git pull
 **3. Build**
 ```powershell
 dotnet publish NutAgent/NutAgent.csproj -c Release
+dotnet publish NutAgent.Tray/NutAgent.Tray.csproj -c Release
 ```
-Expect output ending in `publish: ups-agent.exe`. No warnings should relate to .NET version mismatches.
+Expect output ending in `publish: ups-agent.exe` and `publish: ups-tray.exe`.
 
 **4. Install**
 ```powershell
-# Server mode (PC has UPS connected via USB):
-.\install\install.ps1 -Mode server
+# Server mode with tray app (PC has UPS connected via USB):
+.\install\install.bat -Mode server -InstallTray
 
 # Client mode (PC shares UPS with another machine):
-.\install\install.ps1 -Mode client -RemoteHost <IP of server PC>
+.\install\install.bat -Mode client -RemoteHost <IP of server PC> -InstallTray
 ```
 
 **5. Verify service started**
