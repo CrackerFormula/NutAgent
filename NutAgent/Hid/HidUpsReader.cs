@@ -15,17 +15,15 @@ public sealed class HidUpsReader : IUpsReader
     // -------------------------------------------------------------------------
 
     // Scale converts the HID logical value to the real-world unit reported via NUT.
-    // The Tripp Lite (and similar) firmware encodes measured electrical values (voltage,
-    // frequency, current) in tenths of the base unit (e.g. logical 1223 = 122.3 V),
-    // while nominal and transfer values use whole units (logical 120 = 120 V).
-    // GetPhysicalValue() can't be used directly — it applies the physical/logical range
-    // scaling from the descriptor, which doubles the error for this device's non-standard
-    // unit exponent encoding. Using logical × scale gives correct results.
+    // Most devices (APC Back-UPS, standard HID Power Device) report all values in whole units
+    // so Scale=1.0 is the correct default. GetPhysicalValue() can't be used directly — some
+    // devices use non-standard unit exponent encoding that makes it produce wrong results.
+    // Per-vendor overrides are applied at connect time for devices with quirky encoding.
     private sealed record NumericUsage(string NutVar, string Format, double Scale = 1.0);
 
     private static readonly Dictionary<uint, NumericUsage> NumericUsages = new()
     {
-        // Battery System (page 0x85) — logical values are in whole units
+        // Battery System (page 0x85)
         [(0x85u << 16) | 0x66] = new("battery.charge",          "F0"),
         [(0x85u << 16) | 0x68] = new("battery.runtime",         "F0"),
         [(0x85u << 16) | 0x30] = new("battery.voltage",         "F2"),
@@ -35,11 +33,10 @@ public sealed class HidUpsReader : IUpsReader
         [(0x85u << 16) | 0x83] = new("battery.capacity",        "F0"),
         [(0x85u << 16) | 0x8F] = new("battery.cyclecount",      "F0"),
 
-        // Power Device (page 0x84) — measured values use 0.1-unit encoding (Scale=0.1),
-        // nominal/transfer/load values use whole-unit encoding (Scale=1.0, the default)
-        [(0x84u << 16) | 0x30] = new("input.voltage",           "F1", 0.1),
-        [(0x84u << 16) | 0x31] = new("input.current",           "F2", 0.1),
-        [(0x84u << 16) | 0x32] = new("input.frequency",         "F1", 0.1),
+        // Power Device (page 0x84)
+        [(0x84u << 16) | 0x30] = new("input.voltage",           "F1"),
+        [(0x84u << 16) | 0x31] = new("input.current",           "F2"),
+        [(0x84u << 16) | 0x32] = new("input.frequency",         "F1"),
         [(0x84u << 16) | 0x33] = new("ups.power",               "F0"),
         [(0x84u << 16) | 0x34] = new("ups.realpower",           "F0"),
         [(0x84u << 16) | 0x35] = new("ups.load",                "F0"),
@@ -48,6 +45,16 @@ public sealed class HidUpsReader : IUpsReader
         [(0x84u << 16) | 0x42] = new("input.frequency.nominal", "F1"),
         [(0x84u << 16) | 0x53] = new("input.transfer.low",      "F1"),
         [(0x84u << 16) | 0x54] = new("input.transfer.high",     "F1"),
+    };
+
+    // Tripp Lite (VID 0x09AE) encodes measured electrical values in 0.1-unit steps
+    // (e.g. logical 1223 = 122.3 V). Nominal and transfer values use whole units.
+    // GetPhysicalValue() doubles the error on this device, so we override Scale instead.
+    private static readonly Dictionary<uint, double> TrippLiteScaleOverrides = new()
+    {
+        [(0x84u << 16) | 0x30] = 0.1,  // input.voltage
+        [(0x84u << 16) | 0x31] = 0.1,  // input.current
+        [(0x84u << 16) | 0x32] = 0.1,  // input.frequency
     };
 
     // Boolean usages: set or clear the corresponding UpsStatus flag.
@@ -86,6 +93,7 @@ public sealed class HidUpsReader : IUpsReader
     private byte[]?                  _inputReportBuffer;
     private byte[]?                  _featureReportBuffer;
     private DeviceItemInputParser[]? _parsers;
+    private Dictionary<uint, NumericUsage> _activeNumericUsages = NumericUsages;
     private UpsState _lastState = new();
 
     public bool IsConnected => _stream != null;
@@ -126,6 +134,7 @@ public sealed class HidUpsReader : IUpsReader
             _lastState.Serial       = TryGetString(_device, 3);
             _lastState.VendorId     = _device.VendorID;
             _lastState.ProductId    = _device.ProductID;
+            _activeNumericUsages    = BuildNumericUsages(_device.VendorID);
 
             // Publish identity into Variables so NUT exposes them immediately
             _lastState.Variables["device.mfr"]     = _lastState.Manufacturer;
@@ -187,6 +196,7 @@ public sealed class HidUpsReader : IUpsReader
             _parsers = null;
             _inputReportBuffer = null;
             _acPresentReceived = false;
+            _activeNumericUsages = NumericUsages;
             TryConnect();
         }
 
@@ -197,7 +207,7 @@ public sealed class HidUpsReader : IUpsReader
     {
         foreach (uint usage in value.Usages.Select(u => (uint)u))
         {
-            if (NumericUsages.TryGetValue(usage, out var numMap))
+            if (_activeNumericUsages.TryGetValue(usage, out var numMap))
             {
                 var actual    = value.GetLogicalValue() * numMap.Scale;
                 var formatted = actual.ToString(numMap.Format, CultureInfo.InvariantCulture);
@@ -270,6 +280,24 @@ public sealed class HidUpsReader : IUpsReader
                 catch { }
             }
         }
+    }
+
+    private static Dictionary<uint, NumericUsage> BuildNumericUsages(int vendorId)
+    {
+        var overrides = vendorId switch
+        {
+            0x09AE => TrippLiteScaleOverrides,
+            _      => null
+        };
+        if (overrides == null) return NumericUsages;
+
+        var result = new Dictionary<uint, NumericUsage>(NumericUsages);
+        foreach (var (usage, scale) in overrides)
+        {
+            if (result.TryGetValue(usage, out var existing))
+                result[usage] = existing with { Scale = scale };
+        }
+        return result;
     }
 
     private static HidDevice? FindUpsDevice()

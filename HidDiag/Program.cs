@@ -5,16 +5,31 @@ using HidSharp;
 using HidSharp.Reports;
 using HidSharp.Reports.Input;
 
-var device = DeviceList.Local.GetHidDevices()
-    .FirstOrDefault(d =>
+var devices = DeviceList.Local.GetHidDevices()
+    .Where(d =>
     {
         try { return d.GetReportDescriptor().DeviceItems.Any(i => i.Usages.GetAllValues().Any(u => (u >> 16) == 0x84 || (u >> 16) == 0x85)); }
         catch { return false; }
-    });
+    })
+    .ToList();
 
-if (device == null) { Console.WriteLine("No HID UPS device found."); return; }
+if (devices.Count == 0) { Console.WriteLine("No HID UPS device found."); return; }
 
-Console.WriteLine($"Device: {device.GetFriendlyName()}  VID={device.VendorID:X4} PID={device.ProductID:X4}");
+// If a VID is passed as argument, filter to that device; otherwise use first found.
+int? filterVid = args.Length > 0 && args[0].StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+    ? Convert.ToInt32(args[0], 16)
+    : args.Length > 0 && int.TryParse(args[0], System.Globalization.NumberStyles.HexNumber, null, out var vid) ? vid : null;
+
+Console.WriteLine($"Found {devices.Count} HID UPS device(s):");
+foreach (var d in devices)
+    Console.WriteLine($"  VID={d.VendorID:X4} PID={d.ProductID:X4}  {TryGet(() => d.GetManufacturer())} / {TryGet(() => d.GetProductName())}");
+Console.WriteLine();
+
+var device = filterVid.HasValue
+    ? devices.FirstOrDefault(d => d.VendorID == filterVid.Value) ?? devices[0]
+    : devices[0];
+
+Console.WriteLine($"--- Diagnosing: VID={device.VendorID:X4} PID={device.ProductID:X4} ---");
 Console.WriteLine($"Manufacturer: {TryGet(() => device.GetManufacturer())}");
 Console.WriteLine($"Product:      {TryGet(() => device.GetProductName())}");
 Console.WriteLine($"Serial:       {TryGet(() => device.GetSerialNumber())}");
