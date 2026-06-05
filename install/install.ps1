@@ -87,7 +87,7 @@ if ($Mode -eq "server") {
 }
 
 if ($InstallTray) {
-    $sourceTray = Join-Path $scriptDir "..\NutAgent.Tray\bin\Release\net10.0-windows\publish\ups-tray.exe"
+    $sourceTray = Join-Path $scriptDir "..\NutAgent.Tray\bin\Release\net10.0-windows\win-x64\publish\ups-tray.exe"
     if (-not (Test-Path $sourceTray)) {
         Write-Warning "ups-tray.exe not found at $sourceTray — skipping tray install."
         Write-Warning "Run: dotnet publish NutAgent.Tray/NutAgent.Tray.csproj -c Release"
