@@ -34,6 +34,8 @@ public sealed class DischargeTracker
         }
     }
 
+    public int ReadingCount { get { lock (_lock) return _count; } }
+
     // Percent per minute; positive = discharging, 0 = stable or insufficient data.
     public double DischargeRatePerMinute => Snapshot().Rate;
 

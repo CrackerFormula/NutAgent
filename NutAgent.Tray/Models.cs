@@ -24,6 +24,8 @@ public class TrayConfig
     public int    ShutdownBatteryThreshold { get; set; } = 20;
     public int    ShutdownRuntimeMinutes   { get; set; } = 5;
     public int    ShutdownDelaySeconds     { get; set; } = 60;
+    public string ShutdownMode             { get; set; } = "Manual";
+    public int    SafetyMarginMinutes      { get; set; } = 3;
     public int    PollIntervalSeconds      { get; set; } = 30;
 }
 

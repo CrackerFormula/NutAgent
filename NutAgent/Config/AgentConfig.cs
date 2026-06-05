@@ -18,13 +18,16 @@ public class AgentConfig
     public string RemotePassword { get; set; } = "";
 
     // Shutdown policy (both modes)
-    public int ShutdownBatteryThreshold { get; set; } = 20;  // trigger shutdown below this %
-    public int ShutdownRuntimeMinutes { get; set; } = 5;     // trigger shutdown below this many minutes of runtime
-    public int ShutdownDelaySeconds { get; set; } = 60;       // grace period before shutdown
-    public int PollIntervalSeconds { get; set; } = 30;        // client poll interval
+    public int          ShutdownBatteryThreshold { get; set; } = 20;  // trigger shutdown below this %
+    public int          ShutdownRuntimeMinutes   { get; set; } = 5;   // trigger shutdown below this many minutes of runtime (Manual mode)
+    public int          ShutdownDelaySeconds     { get; set; } = 60;  // grace period before shutdown
+    public ShutdownMode ShutdownMode             { get; set; } = ShutdownMode.Manual;
+    public int          SafetyMarginMinutes      { get; set; } = 3;   // Auto mode: shut down when MinutesToEmpty drops below this
+    public int          PollIntervalSeconds      { get; set; } = 30;  // client poll interval
 }
 
-public enum AgentMode { Server, Client }
+public enum AgentMode     { Server, Client }
+public enum ShutdownMode  { Manual, Auto }
 
 public class NutUser
 {

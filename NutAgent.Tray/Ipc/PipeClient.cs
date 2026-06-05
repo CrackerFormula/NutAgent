@@ -36,6 +36,8 @@ public static class PipeClient
             ["shutdownBatteryThreshold"] = config.ShutdownBatteryThreshold,
             ["shutdownRuntimeMinutes"]   = config.ShutdownRuntimeMinutes,
             ["shutdownDelaySeconds"]     = config.ShutdownDelaySeconds,
+            ["shutdownMode"]             = config.ShutdownMode,
+            ["safetyMarginMinutes"]      = config.SafetyMarginMinutes,
         };
         return SendAsync<SetConfigResult>(payload, ct);
     }

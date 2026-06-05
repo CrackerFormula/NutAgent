@@ -43,6 +43,12 @@ public partial class SettingsWindow : Window
         ChargeThreshBox.Text  = c.ShutdownBatteryThreshold.ToString();
         RuntimeThreshBox.Text = c.ShutdownRuntimeMinutes.ToString();
         ShutdownDelayBox.Text = c.ShutdownDelaySeconds.ToString();
+
+        bool isAuto = c.ShutdownMode.Equals("Auto", StringComparison.OrdinalIgnoreCase);
+        ManualRadio.IsChecked  = !isAuto;
+        AutoRadio.IsChecked    = isAuto;
+        SafetyMarginBox.Text   = c.SafetyMarginMinutes.ToString();
+        AutoPanel.Visibility   = isAuto ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ServerRadio_Checked(object sender, RoutedEventArgs e)
@@ -55,6 +61,16 @@ public partial class SettingsWindow : Window
     {
         ServerPanel.Visibility = Visibility.Collapsed;
         ClientPanel.Visibility = Visibility.Visible;
+    }
+
+    private void ManualRadio_Checked(object sender, RoutedEventArgs e)
+    {
+        if (AutoPanel != null) AutoPanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void AutoRadio_Checked(object sender, RoutedEventArgs e)
+    {
+        if (AutoPanel != null) AutoPanel.Visibility = Visibility.Visible;
     }
 
     private async void Save_Click(object sender, RoutedEventArgs e)
@@ -86,6 +102,7 @@ public partial class SettingsWindow : Window
     {
         config = null;
         bool isServer = ServerRadio.IsChecked == true;
+        bool isAuto   = AutoRadio.IsChecked   == true;
 
         // Validate the port field for the active mode only; preserve the other from original.
         int activePort;
@@ -111,6 +128,12 @@ public partial class SettingsWindow : Window
             ShowNumericError(); return false;
         }
 
+        int safetyMargin = _original?.SafetyMarginMinutes ?? 3;
+        if (isAuto && !int.TryParse(SafetyMarginBox.Text.Trim(), out safetyMargin))
+        {
+            ShowNumericError(); return false;
+        }
+
         config = new TrayConfig
         {
             Mode                     = isServer ? "Server" : "Client",
@@ -125,6 +148,8 @@ public partial class SettingsWindow : Window
             ShutdownBatteryThreshold = charge,
             ShutdownRuntimeMinutes   = runtime,
             ShutdownDelaySeconds     = delay,
+            ShutdownMode             = isAuto ? "Auto" : "Manual",
+            SafetyMarginMinutes      = safetyMargin,
             PollIntervalSeconds      = _original?.PollIntervalSeconds ?? 30,
         };
         return true;

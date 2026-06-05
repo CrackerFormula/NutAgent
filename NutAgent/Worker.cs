@@ -59,12 +59,27 @@ public sealed class Worker : BackgroundService
 
                 if (isOnBattery)
                 {
-                    _logger.LogWarning("UPS on battery — charge: {Charge:F0}%  runtime: {Runtime}s",
-                        newState.BatteryCharge, newState.RuntimeSeconds);
+                    _logger.LogWarning("UPS on battery — charge: {Charge:F0}%  runtime: {Runtime}s  est: {Est:F1}min",
+                        newState.BatteryCharge, newState.RuntimeSeconds,
+                        minutesToEmpty < double.MaxValue ? minutesToEmpty : 0);
 
-                    bool chargeCritical  = newState.BatteryCharge <= _config.ShutdownBatteryThreshold;
-                    bool runtimeCritical = newState.RuntimeSeconds > 0 &&
+                    bool chargeCritical = newState.BatteryCharge <= _config.ShutdownBatteryThreshold;
+
+                    bool runtimeCritical;
+                    if (_config.ShutdownMode == ShutdownMode.Auto && tracker.ReadingCount >= 3 && minutesToEmpty < double.MaxValue)
+                    {
+                        // Auto: shut down when discharge-tracker estimate minus safety margin is exhausted.
+                        runtimeCritical = (minutesToEmpty - _config.SafetyMarginMinutes) <= 0;
+                        if (runtimeCritical)
+                            _logger.LogWarning("Auto mode: {Minutes:F1} min estimated, {Margin} min safety margin — shutdown triggered",
+                                minutesToEmpty, _config.SafetyMarginMinutes);
+                    }
+                    else
+                    {
+                        // Manual: use fixed runtime threshold from config.
+                        runtimeCritical = newState.RuntimeSeconds > 0 &&
                                           newState.RuntimeSeconds <= _config.ShutdownRuntimeMinutes * 60;
+                    }
 
                     if (newState.Status.IsLowBattery() || chargeCritical || runtimeCritical)
                         shutdown.ScheduleShutdown(newState.Status.IsLowBattery() ? 0 : _config.ShutdownDelaySeconds);

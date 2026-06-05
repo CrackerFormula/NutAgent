@@ -148,6 +148,10 @@ public sealed class PipeServer
         if (el.TryGetProperty("shutdownBatteryThreshold", out var bt)) _config.ShutdownBatteryThreshold = bt.GetInt32();
         if (el.TryGetProperty("shutdownRuntimeMinutes",   out var rt)) _config.ShutdownRuntimeMinutes   = rt.GetInt32();
         if (el.TryGetProperty("shutdownDelaySeconds",     out var ds)) _config.ShutdownDelaySeconds     = ds.GetInt32();
+        if (el.TryGetProperty("safetyMarginMinutes",      out var sm)) _config.SafetyMarginMinutes      = sm.GetInt32();
+        if (el.TryGetProperty("shutdownMode", out var sdMode) && sdMode.GetString() is {} sdModeStr &&
+            Enum.TryParse<ShutdownMode>(sdModeStr, ignoreCase: true, out var sdModeVal))
+            _config.ShutdownMode = sdModeVal;
 
         // Name / identity fields — NutSession reads these live, effective immediately.
         if (el.TryGetProperty("upsName",        out var un) && un.GetString() is {} u) _config.UpsName        = u;
@@ -198,6 +202,8 @@ public sealed class PipeServer
             agent["ShutdownBatteryThreshold"] = _config.ShutdownBatteryThreshold;
             agent["ShutdownRuntimeMinutes"]   = _config.ShutdownRuntimeMinutes;
             agent["ShutdownDelaySeconds"]     = _config.ShutdownDelaySeconds;
+            agent["ShutdownMode"]             = _config.ShutdownMode.ToString();
+            agent["SafetyMarginMinutes"]      = _config.SafetyMarginMinutes;
             agent["Port"]                     = _config.Port;
             agent["UpsName"]                  = _config.UpsName;
             agent["UpsDescription"]           = _config.UpsDescription;
