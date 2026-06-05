@@ -17,6 +17,7 @@ SolidCompression=yes
 WizardStyle=modern
 DisableProgramGroupPage=yes
 UninstallDisplayName=NutAgent
+UsedUserAreasWarning=no
 
 [Files]
 ; BeforeInstall on the first file handles stop/cleanup for upgrade installs
@@ -119,20 +120,28 @@ end;
 procedure PatchConfig;
 var
   Path, Content: String;
+  Lines: TStringList;
 begin
   Path := ExpandConstant('{app}\appsettings.json');
-  if not LoadStringFromFile(Path, Content) then Exit;
+  Lines := TStringList.Create;
+  try
+    Lines.LoadFromFile(Path);
+    Content := Lines.Text;
 
-  if IsServerMode then
-    StringChangeEx(Content, '"Mode": "Client"', '"Mode": "Server"', True)
-  else
-  begin
-    StringChangeEx(Content, '"Mode": "Server"', '"Mode": "Client"', True);
-    StringChangeEx(Content, '"RemoteHost": ""',
-        '"RemoteHost": "' + Trim(RemoteHostPage.Values[0]) + '"', True);
+    if IsServerMode then
+      StringChangeEx(Content, '"Mode": "Client"', '"Mode": "Server"', True)
+    else
+    begin
+      StringChangeEx(Content, '"Mode": "Server"', '"Mode": "Client"', True);
+      StringChangeEx(Content, '"RemoteHost": ""',
+          '"RemoteHost": "' + Trim(RemoteHostPage.Values[0]) + '"', True);
+    end;
+
+    Lines.Text := Content;
+    Lines.SaveToFile(Path);
+  finally
+    Lines.Free;
   end;
-
-  SaveStringToFile(Path, Content, False);
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
