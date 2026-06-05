@@ -298,7 +298,7 @@ double minutesToEmpty   = tracker.MinutesToEmpty;           // e.g. 170 min
 | **2** | ✅ Done | ~~runtime threshold~~ ✅; ~~validate HidUpsReader~~ ✅; ~~DischargeTracker~~ ✅; ~~PipeServer~~ ✅; ~~config hot-reload~~ ✅ |
 | **3** | ✅ Done | ~~NutAgent.Tray~~ ✅ — WPF tray icon (4 states) + settings window + PipeClient |
 | **4** | ✅ Done | Auto mode — `DischargeTracker` drives dynamic shutdown threshold |
-| **5** | 🔧 In progress | Inno Setup installer — single `NutAgent-Setup.exe`, UAC elevation, wizard (mode + remote host), service + firewall + tray in one pass. See `install/nutagent.iss` and `install/INSTALLER_PLAN.md`. |
+| **5** | ✅ Done | Inno Setup installer — single `NutAgent-Setup.exe`, UAC elevation, wizard (mode + remote host), service + firewall + tray in one pass. See `install/nutagent.iss` and `install/INSTALLER_PLAN.md`. |
 
 ---
 
