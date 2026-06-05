@@ -92,20 +92,19 @@ if ($InstallTray) {
         Write-Warning "ups-tray.exe not found at $sourceTray — skipping tray install."
         Write-Warning "Run: dotnet publish NutAgent.Tray/NutAgent.Tray.csproj -c Release"
     } else {
-        # Kill running tray before overwriting
-        Get-Process -Name "ups-tray" -ErrorAction SilentlyContinue | Stop-Process -Force
+        # Kill running tray before overwriting the exe
+        Get-Process -Name "ups-tray" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 500
 
         Copy-Item $sourceTray $InstallDir -Force
         $trayExe = Join-Path $InstallDir "ups-tray.exe"
 
-        # Add to current user's startup
+        # Add to current user's startup (runs as user on next login)
         $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
         Set-ItemProperty -Path $runKey -Name "NutAgentTray" -Value "`"$trayExe`""
 
-        # Launch tray now
-        Start-Process $trayExe
-
-        Write-Host "Tray app installed and launched. Will auto-start on login."
+        Write-Host "Tray app installed. Launch it now: $trayExe"
+        Write-Host "It will auto-start on next login."
     }
 }
 
