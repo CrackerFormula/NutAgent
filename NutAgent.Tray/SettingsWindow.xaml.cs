@@ -48,7 +48,8 @@ public partial class SettingsWindow : Window
         ManualRadio.IsChecked  = !isAuto;
         AutoRadio.IsChecked    = isAuto;
         SafetyMarginBox.Text   = c.SafetyMarginMinutes.ToString();
-        AutoPanel.Visibility   = isAuto ? Visibility.Visible : Visibility.Collapsed;
+        AutoPanel.Visibility        = isAuto ? Visibility.Visible : Visibility.Collapsed;
+        SetRuntimeThreshEnabled(!isAuto);
     }
 
     private void ServerRadio_Checked(object sender, RoutedEventArgs e)
@@ -66,11 +67,21 @@ public partial class SettingsWindow : Window
     private void ManualRadio_Checked(object sender, RoutedEventArgs e)
     {
         if (AutoPanel != null) AutoPanel.Visibility = Visibility.Collapsed;
+        SetRuntimeThreshEnabled(true);
     }
 
     private void AutoRadio_Checked(object sender, RoutedEventArgs e)
     {
         if (AutoPanel != null) AutoPanel.Visibility = Visibility.Visible;
+        SetRuntimeThreshEnabled(false);
+    }
+
+    private void SetRuntimeThreshEnabled(bool enabled)
+    {
+        if (RuntimeThreshLabel == null) return;
+        RuntimeThreshLabel.IsEnabled = enabled;
+        RuntimeThreshBox.IsEnabled   = enabled;
+        RuntimeThreshUnit.IsEnabled  = enabled;
     }
 
     private async void Save_Click(object sender, RoutedEventArgs e)
