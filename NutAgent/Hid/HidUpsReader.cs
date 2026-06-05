@@ -95,6 +95,7 @@ public sealed class HidUpsReader : IUpsReader
     private DeviceItemInputParser[]? _parsers;
     private Dictionary<uint, NumericUsage> _activeNumericUsages = NumericUsages;
     private UpsState _lastState = new();
+    private volatile bool _deviceRemoved;
 
     public bool IsConnected => _stream != null;
 
@@ -106,6 +107,9 @@ public sealed class HidUpsReader : IUpsReader
 
     private void TryConnect()
     {
+        DeviceList.Local.Changed -= OnDeviceListChanged;
+        _deviceRemoved = false;
+
         try
         {
             _device = FindUpsDevice();
@@ -127,6 +131,7 @@ public sealed class HidUpsReader : IUpsReader
             _featureReportBuffer = new byte[_device.GetMaxFeatureReportLength()];
             _parsers             = _deviceItems.Select(item => item.CreateDeviceItemInputParser()).ToArray();
             _inputReceiver.Start(_stream);
+            DeviceList.Local.Changed += OnDeviceListChanged;
 
             // Identity from USB string descriptors
             _lastState.Manufacturer = TryGetString(_device, 1);
@@ -156,6 +161,15 @@ public sealed class HidUpsReader : IUpsReader
         }
     }
 
+    private void OnDeviceListChanged(object? sender, EventArgs e)
+    {
+        if (_device != null && !DeviceList.Local.GetHidDevices().Any(d => d.DevicePath == _device.DevicePath))
+        {
+            _logger.LogInformation("HID UPS device removed (DevicePath no longer present)");
+            _deviceRemoved = true;
+        }
+    }
+
     public UpsState Read()
     {
         if (_stream == null || _inputReceiver == null || _deviceItems == null || _parsers == null || _inputReportBuffer == null)
@@ -166,6 +180,9 @@ public sealed class HidUpsReader : IUpsReader
 
         try
         {
+            if (_deviceRemoved)
+                throw new IOException("HID UPS device removed");
+
             Report report;
             while (_inputReceiver.TryRead(_inputReportBuffer, 0, out report))
             {
@@ -334,6 +351,7 @@ public sealed class HidUpsReader : IUpsReader
 
     public void Dispose()
     {
+        DeviceList.Local.Changed -= OnDeviceListChanged;
         _inputReceiver       = null;
         _parsers             = null;
         _inputReportBuffer   = null;
