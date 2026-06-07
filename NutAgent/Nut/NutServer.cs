@@ -8,9 +8,15 @@ namespace NutAgent.Nut;
 
 public sealed class NutServer
 {
+    // Caps concurrent NUT sessions so a flood of connections can't exhaust threads/sockets —
+    // a real install only ever needs a handful (HA, Unraid, a couple of client-mode PCs).
+    private const int MaxConcurrentConnections = 20;
+
     private readonly AgentConfig _config;
     private readonly Func<UpsState> _getState;
     private readonly ILogger<NutServer> _logger;
+    private readonly LoginThrottle _loginThrottle = new();
+    private readonly SemaphoreSlim _connectionSlots = new(MaxConcurrentConnections, MaxConcurrentConnections);
     private TcpListener? _listener;
 
     public NutServer(AgentConfig config, Func<UpsState> getState, ILogger<NutServer> logger)
@@ -32,6 +38,15 @@ public sealed class NutServer
             while (!ct.IsCancellationRequested)
             {
                 var client = await _listener.AcceptTcpClientAsync(ct);
+
+                if (!await _connectionSlots.WaitAsync(0, ct))
+                {
+                    _logger.LogDebug("NUT connection limit ({Max}) reached — rejecting {Endpoint}",
+                        MaxConcurrentConnections, client.Client.RemoteEndPoint);
+                    client.Dispose();
+                    continue;
+                }
+
                 _ = HandleClientAsync(client, ct);
             }
         }
@@ -47,10 +62,17 @@ public sealed class NutServer
         var endpoint = client.Client.RemoteEndPoint;
         _logger.LogDebug("NUT client connected: {Endpoint}", endpoint);
 
-        using (client)
+        try
         {
-            var session = new NutSession(client, _config, _getState, _logger);
-            await session.RunAsync(ct);
+            using (client)
+            {
+                var session = new NutSession(client, _config, _getState, _loginThrottle, _logger);
+                await session.RunAsync(ct);
+            }
+        }
+        finally
+        {
+            _connectionSlots.Release();
         }
 
         _logger.LogDebug("NUT client disconnected: {Endpoint}", endpoint);

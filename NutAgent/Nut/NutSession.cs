@@ -1,4 +1,7 @@
+using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Extensions.Logging;
 using NutAgent.Config;
 using NutAgent.Hid;
@@ -9,20 +12,32 @@ namespace NutAgent.Nut;
 // NUT protocol spec: https://networkupstools.org/docs/developer-guide.chunked/ar01s09.html
 internal sealed class NutSession
 {
+    // A client that never completes a line (or never sends anything) would otherwise
+    // hold its connection — and the thread/socket behind it — open forever.
+    private const int IdleTimeoutSeconds = 60;
+    // NUT commands are short ("LIST VAR <upsname>" etc.) — anything past this is either
+    // a misbehaving client or someone testing how much memory a single line can consume.
+    private const int MaxLineLength = 512;
+
     private readonly TcpClient _client;
     private readonly AgentConfig _config;
     private readonly Func<UpsState> _getState;
+    private readonly LoginThrottle _loginThrottle;
+    private readonly IPAddress? _remoteAddress;
     private readonly ILogger _logger;
 
     private string? _authenticatedUser;
     private bool _passwordVerified;
 
-    public NutSession(TcpClient client, AgentConfig config, Func<UpsState> getState, ILogger logger)
+    public NutSession(TcpClient client, AgentConfig config, Func<UpsState> getState,
+        LoginThrottle loginThrottle, ILogger logger)
     {
-        _client   = client;
-        _config   = config;
-        _getState = getState;
-        _logger   = logger;
+        _client        = client;
+        _config        = config;
+        _getState      = getState;
+        _loginThrottle = loginThrottle;
+        _logger        = logger;
+        _remoteAddress = (client.Client.RemoteEndPoint as IPEndPoint)?.Address;
     }
 
     public async Task RunAsync(CancellationToken ct)
@@ -31,11 +46,25 @@ internal sealed class NutSession
         using var reader = new StreamReader(stream, leaveOpen: true);
         await using var writer = new StreamWriter(stream, leaveOpen: true) { AutoFlush = true, NewLine = "\n" };
 
+        // Reschedules on every line read — fires only when the client goes idle.
+        using var idleCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
         try
         {
             while (!ct.IsCancellationRequested)
             {
-                var line = await reader.ReadLineAsync(ct);
+                idleCts.CancelAfter(TimeSpan.FromSeconds(IdleTimeoutSeconds));
+
+                string? line;
+                try
+                {
+                    line = await ReadLineAsync(reader, idleCts.Token);
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    _logger.LogDebug("NUT session idle for {Seconds}s — disconnecting", IdleTimeoutSeconds);
+                    break;
+                }
                 if (line == null) break;
 
                 var response = HandleCommand(line.Trim());
@@ -49,6 +78,31 @@ internal sealed class NutSession
         {
             _logger.LogDebug(ex, "NUT session error");
         }
+    }
+
+    // StreamReader.ReadLineAsync has no length cap — a client that never sends '\n'
+    // would make it buffer the line in memory indefinitely. Read one char at a time
+    // (NUT commands are tiny and infrequent, so the overhead is irrelevant) and bail
+    // out once MaxLineLength is exceeded.
+    private static async Task<string?> ReadLineAsync(StreamReader reader, CancellationToken ct)
+    {
+        var sb  = new StringBuilder();
+        var buf = new char[1];
+
+        while (await reader.ReadAsync(buf.AsMemory(0, 1), ct) > 0)
+        {
+            if (buf[0] == '\n')
+            {
+                if (sb.Length > 0 && sb[^1] == '\r') sb.Length--;
+                return sb.ToString();
+            }
+            if (sb.Length >= MaxLineLength)
+                throw new InvalidOperationException($"NUT command exceeded {MaxLineLength} characters");
+
+            sb.Append(buf[0]);
+        }
+
+        return sb.Length > 0 ? sb.ToString() : null;
     }
 
     private string HandleCommand(string line)
@@ -75,9 +129,15 @@ internal sealed class NutSession
     private string HandleUsername(string[] parts)
     {
         if (parts.Length < 2) return "ERR INVALID-ARGUMENT";
+        if (IsLockedOut()) return "ERR ACCESS-DENIED";
+
         var user = _config.Users.FirstOrDefault(u =>
             u.Username.Equals(parts[1], StringComparison.OrdinalIgnoreCase));
-        if (user == null) return "ERR ACCESS-DENIED";
+        if (user == null)
+        {
+            RecordFailure();
+            return "ERR ACCESS-DENIED";
+        }
         _authenticatedUser = parts[1];
         _passwordVerified = false;
         return "OK";
@@ -86,11 +146,35 @@ internal sealed class NutSession
     private string HandlePassword(string[] parts)
     {
         if (parts.Length < 2 || _authenticatedUser == null) return "ERR ACCESS-DENIED";
+        if (IsLockedOut()) return "ERR ACCESS-DENIED";
+
         var user = _config.Users.FirstOrDefault(u =>
             u.Username.Equals(_authenticatedUser, StringComparison.OrdinalIgnoreCase));
-        if (user == null || user.Password != parts[1]) return "ERR ACCESS-DENIED";
+        if (user == null || !FixedTimeEquals(user.Password, parts[1]))
+        {
+            RecordFailure();
+            return "ERR ACCESS-DENIED";
+        }
+
+        if (_remoteAddress != null) _loginThrottle.RecordSuccess(_remoteAddress);
         _passwordVerified = true;
         return "OK";
+    }
+
+    private bool IsLockedOut() => _remoteAddress != null && _loginThrottle.IsLockedOut(_remoteAddress);
+
+    private void RecordFailure()
+    {
+        if (_remoteAddress != null) _loginThrottle.RecordFailure(_remoteAddress);
+    }
+
+    // Guards against timing attacks that could otherwise reveal how many leading
+    // characters of a guessed password are correct.
+    private static bool FixedTimeEquals(string expected, string actual)
+    {
+        var a = Encoding.UTF8.GetBytes(expected);
+        var b = Encoding.UTF8.GetBytes(actual);
+        return a.Length == b.Length && CryptographicOperations.FixedTimeEquals(a, b);
     }
 
     private string HandleLogin(string[] parts)
