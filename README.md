@@ -162,6 +162,59 @@ Most settings (thresholds, login, UPS name, remote host) apply immediately. Chan
 
 ---
 
+## My UPS doesn't work right — how do I get it fixed?
+
+NutAgent supports new UPS models by *learning what they actually send over USB* — so the more concretely you can show what your UPS is doing, the faster it can be fixed. Here's what to gather, roughly in order of how much it helps:
+
+### 1. Say exactly what's wrong
+
+Pick whichever matches what you're seeing — it changes where the problem lives:
+
+- **Nothing useful shows up at all** — `battery.charge` is stuck at `100`, `battery.runtime` is `0`, status is always `OL` → NutAgent isn't *finding* the device
+- **Some numbers are just wrong** — e.g. voltage reads `1223` instead of `122.3` → the device encodes values differently than NutAgent expects (this is exactly what happened with Tripp Lite units — they needed a one-line fix once we knew the pattern)
+- **Mostly works, but one value is missing** — e.g. no `ups.realpower` → your UPS may simply not report that value at all (common on budget models — see the Troubleshooting note above)
+- **Status is wrong** — e.g. it says "online" while running on battery power
+
+### 2. Tell us what the device is
+
+- Manufacturer and model (printed on the unit itself)
+- USB Vendor/Product ID — open **Device Manager**, find the UPS, **Properties → Details → Hardware Ids**. It'll look like `VID_09AE&PID_3016`
+
+### 3. Show what NutAgent currently reports
+
+From any machine on your network (replace the placeholders with your own):
+
+```
+telnet <PC_IP> 3493
+USERNAME admin
+PASSWORD <your password>
+LIST VAR <ups name>
+LOGOUT
+```
+
+Copy/paste everything it prints back.
+
+### 4. Grab the service's startup logs
+
+Open **Event Viewer → Windows Logs → Application**, filter by **Source: NutAgent**, and copy the entries from when the service starts up — especially any lines mentioning `Startup poll`, `HID status usage`, or `ACPresent usage`. These show exactly which signals NutAgent is receiving from your UPS in those first few seconds.
+
+### 5. Dump the USB report descriptor — *this is the one that really matters*
+
+Everything above tells us *that* something's wrong. This step is what tells us *how to fix it* — it's a complete list of every value and signal your UPS actually sends over USB, in the exact format NutAgent needs to be taught to read.
+
+NutAgent ships with a small tool for exactly this — **`HidDiag.exe`**, already sitting in your install folder, no extra downloads needed:
+
+1. With your UPS plugged in (and nothing else hogging it — close any manufacturer monitoring app first), open a command prompt in `C:\NutAgent\` and run:
+   ```
+   HidDiag.exe
+   ```
+2. Let it finish — it spends about 5 seconds capturing live data, so don't unplug the UPS mid-run
+3. Copy/paste the **entire** output. It prints the full list of usages, value ranges, and live readings your UPS sends — exactly what's needed to teach NutAgent to read it correctly
+
+If you can provide all five of these, fixing support for your device usually becomes a quick, mechanical change rather than a guessing game — that's exactly how Tripp Lite, APC, and CyberPower support were each added.
+
+---
+
 ## How it works (for the curious)
 
 NutAgent reads your UPS's status directly over USB using the standard **HID Power Device class** that virtually every consumer UPS implements — the same interface the official NUT Windows driver uses, just without needing Zadig. It then serves that data over a plain-text TCP protocol (the NUT protocol) that Home Assistant, Unraid, and other tools already know how to speak.

@@ -25,6 +25,10 @@ Source: "..\NutAgent\bin\Release\net10.0-windows\win-x64\publish\ups-agent.exe";
     DestDir: "{app}"; BeforeInstall: PrepareForInstall; Flags: ignoreversion
 Source: "..\NutAgent.Tray\bin\Release\net10.0-windows\win-x64\publish\ups-tray.exe"; \
     DestDir: "{app}"; Flags: ignoreversion
+; Diagnostic dump tool — bundled so users can gather device-support info without
+; cloning/building anything; see the README's "My UPS doesn't work right" section
+Source: "..\HidDiag\bin\Release\net10.0\win-x64\publish\HidDiag.exe"; \
+    DestDir: "{app}"; Flags: ignoreversion
 ; onlyifdoesntexist preserves the user's config (password, thresholds) on reinstall/upgrade
 Source: "..\NutAgent\appsettings.json"; \
     DestDir: "{app}"; AfterInstall: PatchConfig; Flags: onlyifdoesntexist

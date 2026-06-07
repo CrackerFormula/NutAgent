@@ -3,7 +3,7 @@
 ## WHAT
 
 **Stack:** .NET 10, C#, Windows x64  
-**Projects:** NutAgent service (Phase 1-2) + NutAgent.Tray WPF tray app (Phase 3)
+**Projects:** NutAgent service (Phase 1-2) + NutAgent.Tray WPF tray app (Phase 3) + HidDiag diagnostic tool
 
 ```
 NutAgent/
@@ -11,6 +11,9 @@ NutAgent/
 ├── CLAUDE.md
 ├── install/
 │   └── install.ps1               # installs service, opens firewall port
+├── HidDiag/                      # standalone HID report-descriptor dumper (device-support diagnostics)
+│   ├── HidDiag.csproj            # net10.0; SelfContained win-x64 single-file (HidDiag.exe)
+│   └── Program.cs
 ├── NutAgent/                     # Windows Service — HID + NUT protocol + shutdown
 │   ├── NutAgent.csproj           # AssemblyName: ups-agent; SelfContained win-x64
 │   ├── Program.cs
@@ -81,9 +84,10 @@ Unraid + HA share UPS D — use native NUT, not NutAgent.
 # Service only:
 dotnet publish NutAgent/NutAgent.csproj -c Release
 
-# Service + tray app:
+# Service + tray app + diagnostic tool (everything the installer bundles):
 dotnet publish NutAgent/NutAgent.csproj -c Release
 dotnet publish NutAgent.Tray/NutAgent.Tray.csproj -c Release
+dotnet publish HidDiag/HidDiag.csproj -c Release
 
 # Inno Setup installer (requires Inno Setup — winget install JRSoftware.InnoSetup):
 iscc install/nutagent.iss
@@ -104,7 +108,7 @@ iscc install/nutagent.iss
 ```
 
 The installer:
-1. Copies `ups-agent.exe` + `appsettings.json` to `C:\NutAgent\`
+1. Copies `ups-agent.exe` + `ups-tray.exe` + `HidDiag.exe` + `appsettings.json` to `C:\NutAgent\`
 2. Registers service via `sc.exe`, sets failure restart actions
 3. Opens firewall port 3493 (server mode only)
 
@@ -132,8 +136,9 @@ git pull
 ```powershell
 dotnet publish NutAgent/NutAgent.csproj -c Release
 dotnet publish NutAgent.Tray/NutAgent.Tray.csproj -c Release
+dotnet publish HidDiag/HidDiag.csproj -c Release
 ```
-Expect output ending in `publish: ups-agent.exe` and `publish: ups-tray.exe`.
+Expect output ending in `publish: ups-agent.exe`, `publish: ups-tray.exe`, and `publish: HidDiag.exe`.
 
 **4. Install**
 ```powershell
@@ -325,7 +330,7 @@ double minutesToEmpty   = tracker.MinutesToEmpty;           // e.g. 170 min
 | Discharging | 0x84 | 0xD3 | `0x008400D3` |
 | Need Replacement | 0x84 | 0xDB | `0x008400DB` |
 
-Use `hidapitester --list-detail` on a Windows machine with the UPS attached to dump the actual report descriptor and verify offsets before writing real parsing code.
+Run `HidDiag.exe` (in this repo, `HidDiag/` — also bundled into every install at `C:\NutAgent\HidDiag.exe`) on a Windows machine with the UPS attached to dump the actual report descriptor — usages, logical/physical ranges, and live input/feature values — and verify offsets before writing real parsing code. It's the same tool end users run to provide device-support diagnostics (see the README's "My UPS doesn't work right" section).
 
 ---
 
