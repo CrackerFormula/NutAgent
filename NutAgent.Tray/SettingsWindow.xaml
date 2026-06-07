@@ -43,7 +43,8 @@
                            Margin="0,0,0,6"/>
                 <TextBlock Grid.Row="3" Grid.Column="0" Text="Password:"
                            VerticalAlignment="Center"/>
-                <PasswordBox Grid.Row="3" Grid.Column="1" x:Name="PasswordBox"/>
+                <PasswordBox Grid.Row="3" Grid.Column="1" x:Name="PasswordBox"
+                             PasswordChanged="PasswordBox_PasswordChanged"/>
             </Grid>
         </GroupBox>
 
@@ -80,7 +81,8 @@
                            Margin="0,0,0,6"/>
                 <TextBlock Grid.Row="4" Grid.Column="0" Text="Password:"
                            VerticalAlignment="Center"/>
-                <PasswordBox Grid.Row="4" Grid.Column="1" x:Name="RemotePasswordBox"/>
+                <PasswordBox Grid.Row="4" Grid.Column="1" x:Name="RemotePasswordBox"
+                             PasswordChanged="RemotePasswordBox_PasswordChanged"/>
             </Grid>
         </GroupBox>
 

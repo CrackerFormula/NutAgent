@@ -131,13 +131,10 @@ internal sealed class NutSession
         if (parts.Length < 2) return "ERR INVALID-ARGUMENT";
         if (IsLockedOut()) return "ERR ACCESS-DENIED";
 
-        var user = _config.Users.FirstOrDefault(u =>
-            u.Username.Equals(parts[1], StringComparison.OrdinalIgnoreCase));
-        if (user == null)
-        {
-            RecordFailure();
-            return "ERR ACCESS-DENIED";
-        }
+        // Accept any username here — whether it's valid is decided (and the failure
+        // recorded) only once a password is supplied. Rejecting unknown usernames at
+        // this stage would let a client enumerate valid accounts before ever guessing
+        // a password, since USERNAME and PASSWORD would then return distinguishable errors.
         _authenticatedUser = parts[1];
         _passwordVerified = false;
         return "OK";

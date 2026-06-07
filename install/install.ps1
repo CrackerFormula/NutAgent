@@ -36,7 +36,16 @@ $exe = Join-Path $InstallDir "ups-agent.exe"
 $cfg = Join-Path $InstallDir "appsettings.json"
 
 # --- Copy files ---
-if (-not (Test-Path $InstallDir)) { New-Item -ItemType Directory -Path $InstallDir | Out-Null }
+if (-not (Test-Path $InstallDir)) {
+    New-Item -ItemType Directory -Path $InstallDir | Out-Null
+
+    # appsettings.json holds plaintext NUT credentials — without an explicit ACL this
+    # folder inherits C:\'s default DACL, which grants BUILTIN\Users read access, so any
+    # local standard-user account could read the password straight off disk. Lock it to
+    # SYSTEM (the service's identity) and Administrators only.
+    & "$env:SystemRoot\System32\icacls.exe" $InstallDir /inheritance:r `
+        /grant:r "SYSTEM:(OI)(CI)F" "BUILTIN\Administrators:(OI)(CI)F" | Out-Null
+}
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $sourceExe = Join-Path $scriptDir "..\NutAgent\bin\Release\net10.0-windows\win-x64\publish\ups-agent.exe"
@@ -79,11 +88,15 @@ $status = (Get-Service -Name $ServiceName).Status
 Write-Host "Service status: $status"
 
 if ($Mode -eq "server") {
-    # Open firewall for NUT port
+    # Open firewall for NUT port — scoped to Domain/Private profiles only. The NUT
+    # protocol is plaintext with a well-known default login (admin/changeme), so we
+    # don't want it reachable the moment a laptop joins a Public network (coffee shop
+    # Wi-Fi, etc.) before the user has had a chance to change the password.
     $ruleName = "NutAgent NUT Server (TCP 3493)"
     Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
-    New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol TCP -LocalPort 3493 -Action Allow | Out-Null
-    Write-Host "Firewall rule added for port 3493"
+    New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol TCP -LocalPort 3493 `
+        -Action Allow -Profile Domain,Private | Out-Null
+    Write-Host "Firewall rule added for port 3493 (Domain/Private networks only)"
 }
 
 if ($InstallTray) {

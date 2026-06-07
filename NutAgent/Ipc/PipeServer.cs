@@ -44,11 +44,13 @@ public sealed class PipeServer
         {
             try
             {
-                // Allow any local user to connect — service runs as SYSTEM and would
-                // otherwise block user-session clients like the tray app.
+                // Service runs as SYSTEM and would otherwise block user-session clients
+                // like the tray app — so allow interactively logged-on users specifically
+                // (S-1-5-4), rather than BUILTIN\Users, which also covers network/batch/
+                // service logons and is broader than anything that legitimately needs this.
                 var security = new PipeSecurity();
                 security.AddAccessRule(new PipeAccessRule(
-                    new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null),
+                    new SecurityIdentifier(WellKnownSidType.InteractiveSid, null),
                     PipeAccessRights.ReadWrite,
                     AccessControlType.Allow));
 
@@ -109,7 +111,8 @@ public sealed class PipeServer
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Pipe request error: {Json}", json);
+            // Don't log the raw payload — setConfig requests carry plaintext credentials.
+            _logger.LogDebug(ex, "Pipe request error");
             return """{"error":"invalid-request"}""";
         }
     }
@@ -142,19 +145,24 @@ public sealed class PipeServer
         // Flatten the primary local user (Users[0]) to username/password for the simple
         // single-account UI in the tray Settings window — most installs have exactly one.
         var user = _config.Users.FirstOrDefault();
+
+        // Passwords are write-only over IPC — any local interactive user can connect to
+        // this pipe, and round-tripping plaintext secrets through getConfig would hand
+        // them out on request. The UI only needs to know whether one is already set so
+        // it can show a placeholder; it sends a new value only when the user changes it.
         return JsonSerializer.Serialize(new
         {
             mode                     = _config.Mode,
             upsName                  = _config.UpsName,
             upsDescription           = _config.UpsDescription,
             username                 = user?.Username ?? "",
-            password                 = user?.Password ?? "",
+            hasPassword              = !string.IsNullOrEmpty(user?.Password),
             port                     = _config.Port,
             remoteHost               = _config.RemoteHost,
             remotePort               = _config.RemotePort,
             remoteUpsName            = _config.RemoteUpsName,
             remoteUsername           = _config.RemoteUsername,
-            remotePassword           = _config.RemotePassword,
+            hasRemotePassword        = !string.IsNullOrEmpty(_config.RemotePassword),
             shutdownBatteryThreshold = _config.ShutdownBatteryThreshold,
             shutdownRuntimeMinutes   = _config.ShutdownRuntimeMinutes,
             shutdownDelaySeconds     = _config.ShutdownDelaySeconds,
@@ -169,11 +177,14 @@ public sealed class PipeServer
         bool portChanged  = false;
         bool modeChanged  = false;
 
-        // Threshold fields — effective immediately on next poll cycle.
-        if (el.TryGetProperty("shutdownBatteryThreshold", out var bt)) _config.ShutdownBatteryThreshold = bt.GetInt32();
-        if (el.TryGetProperty("shutdownRuntimeMinutes",   out var rt)) _config.ShutdownRuntimeMinutes   = rt.GetInt32();
-        if (el.TryGetProperty("shutdownDelaySeconds",     out var ds)) _config.ShutdownDelaySeconds     = ds.GetInt32();
-        if (el.TryGetProperty("safetyMarginMinutes",      out var sm)) _config.SafetyMarginMinutes      = sm.GetInt32();
+        // Threshold fields — effective immediately on next poll cycle. Clamped to sane
+        // ranges: an out-of-range value here (e.g. a 100% charge threshold) would make
+        // the "on battery" check trip on the very next minor power blip and force an
+        // immediate shutdown — bound the inputs so a bad request can't manufacture that.
+        if (el.TryGetProperty("shutdownBatteryThreshold", out var bt)) _config.ShutdownBatteryThreshold = Clamp(bt.GetInt32(), 1, 99);
+        if (el.TryGetProperty("shutdownRuntimeMinutes",   out var rt)) _config.ShutdownRuntimeMinutes   = Clamp(rt.GetInt32(), 0, 1440);
+        if (el.TryGetProperty("shutdownDelaySeconds",     out var ds)) _config.ShutdownDelaySeconds     = Clamp(ds.GetInt32(), 0, 3600);
+        if (el.TryGetProperty("safetyMarginMinutes",      out var sm)) _config.SafetyMarginMinutes      = Clamp(sm.GetInt32(), 0, 120);
         if (el.TryGetProperty("shutdownMode", out var sdMode) && sdMode.GetString() is {} sdModeStr &&
             Enum.TryParse<ShutdownMode>(sdModeStr, ignoreCase: true, out var sdModeVal))
             _config.ShutdownMode = sdModeVal;
@@ -183,27 +194,37 @@ public sealed class PipeServer
         if (el.TryGetProperty("upsDescription", out var ud) && ud.GetString() is {} d) _config.UpsDescription = d;
 
         // Local NUT login (server mode) — update the primary user (Users[0]); create one if
-        // the list is empty. NutSession reads _config.Users live, effective immediately.
-        if (el.TryGetProperty("username", out var lu) && lu.GetString() is {} luser &&
-            el.TryGetProperty("password", out var lp) && lp.GetString() is {} lpass)
+        // the list is empty. Username and password are applied independently: the tray only
+        // sends "password" when the user actually typed a new one (see BuildGetConfig — it
+        // never echoes the existing plaintext password back, so the UI can't "round-trip"
+        // an unchanged value). NutSession reads _config.Users live, effective immediately.
+        string? newUsername = el.TryGetProperty("username", out var lu) ? lu.GetString() : null;
+        string? newPassword = el.TryGetProperty("password", out var lp) ? lp.GetString() : null;
+        if (newUsername != null || newPassword != null)
         {
             var primary = _config.Users.FirstOrDefault();
-            if (primary != null) { primary.Username = luser; primary.Password = lpass; }
-            else _config.Users.Add(new NutUser { Username = luser, Password = lpass });
+            if (primary == null)
+            {
+                primary = new NutUser();
+                _config.Users.Add(primary);
+            }
+            if (newUsername != null) primary.Username = newUsername;
+            if (newPassword != null) primary.Password = newPassword;
         }
 
         // Remote fields (client mode) — NutClient reads per-poll, effective on next poll.
+        // RemotePassword follows the same "only sent when changed" rule as the local password.
         if (el.TryGetProperty("remoteHost",          out var rh) && rh.GetString() is {} h)  _config.RemoteHost     = h;
-        if (el.TryGetProperty("remotePort",          out var rp))                             _config.RemotePort     = rp.GetInt32();
+        if (el.TryGetProperty("remotePort",          out var rp))                             _config.RemotePort     = Clamp(rp.GetInt32(), 1, 65535);
         if (el.TryGetProperty("remoteUpsName",       out var ru) && ru.GetString() is {} r)   _config.RemoteUpsName  = r;
         if (el.TryGetProperty("remoteUsername",      out var rUser) && rUser.GetString() is {} rUserName) _config.RemoteUsername = rUserName;
         if (el.TryGetProperty("remotePassword",      out var rPass) && rPass.GetString() is {} rPassword) _config.RemotePassword = rPassword;
-        if (el.TryGetProperty("pollIntervalSeconds", out var pi))                             _config.PollIntervalSeconds = pi.GetInt32();
+        if (el.TryGetProperty("pollIntervalSeconds", out var pi))                             _config.PollIntervalSeconds = Clamp(pi.GetInt32(), 5, 3600);
 
         // Port change — NutServer rebinds on restart.
-        if (el.TryGetProperty("port", out var port) && port.GetInt32() != _config.Port)
+        if (el.TryGetProperty("port", out var port) && Clamp(port.GetInt32(), 1, 65535) is var newPort && newPort != _config.Port)
         {
-            _config.Port = port.GetInt32();
+            _config.Port = newPort;
             portChanged  = true;
         }
 
@@ -224,6 +245,8 @@ public sealed class PipeServer
             ? """{"ok":true,"requiresRestart":true}"""
             : """{"ok":true}""";
     }
+
+    private static int Clamp(int value, int min, int max) => Math.Min(Math.Max(value, min), max);
 
     private void PersistConfig()
     {

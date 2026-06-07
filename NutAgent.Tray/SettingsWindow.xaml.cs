@@ -5,7 +5,16 @@ namespace NutAgent.Tray;
 
 public partial class SettingsWindow : Window
 {
+    // Shown in the password boxes when the service reports a password is already set —
+    // purely cosmetic. The service never sends the real value back (see PipeClient /
+    // PipeServer.BuildGetConfig), so we can't prefill the actual password; this just
+    // signals "something is configured" without claiming to show what it is.
+    private const string PasswordPlaceholder = "••••••••";
+
     private TrayConfig? _original;
+    private bool _populating;
+    private bool _passwordEdited;
+    private bool _remotePasswordEdited;
 
     public SettingsWindow()
     {
@@ -31,29 +40,49 @@ public partial class SettingsWindow : Window
 
     private void Populate(TrayConfig c)
     {
-        bool server = c.Mode.Equals("Server", StringComparison.OrdinalIgnoreCase);
-        ServerRadio.IsChecked = server;
-        ClientRadio.IsChecked = !server;
+        // Suppress PasswordChanged while we set placeholder text programmatically —
+        // otherwise the boxes would look "edited" before the user touches them.
+        _populating = true;
+        try
+        {
+            bool server = c.Mode.Equals("Server", StringComparison.OrdinalIgnoreCase);
+            ServerRadio.IsChecked = server;
+            ClientRadio.IsChecked = !server;
 
-        UpsNameBox.Text       = c.UpsName;
-        PortBox.Text          = c.Port.ToString();
-        UsernameBox.Text      = c.Username;
-        PasswordBox.Password  = c.Password;
-        RemoteHostBox.Text    = c.RemoteHost;
-        RemotePortBox.Text    = c.RemotePort.ToString();
-        RemoteUpsBox.Text     = c.RemoteUpsName;
-        RemoteUsernameBox.Text     = c.RemoteUsername;
-        RemotePasswordBox.Password = c.RemotePassword;
-        ChargeThreshBox.Text  = c.ShutdownBatteryThreshold.ToString();
-        RuntimeThreshBox.Text = c.ShutdownRuntimeMinutes.ToString();
-        ShutdownDelayBox.Text = c.ShutdownDelaySeconds.ToString();
+            UpsNameBox.Text       = c.UpsName;
+            PortBox.Text          = c.Port.ToString();
+            UsernameBox.Text      = c.Username;
+            PasswordBox.Password  = c.HasPassword ? PasswordPlaceholder : "";
+            RemoteHostBox.Text    = c.RemoteHost;
+            RemotePortBox.Text    = c.RemotePort.ToString();
+            RemoteUpsBox.Text     = c.RemoteUpsName;
+            RemoteUsernameBox.Text     = c.RemoteUsername;
+            RemotePasswordBox.Password = c.HasRemotePassword ? PasswordPlaceholder : "";
+            ChargeThreshBox.Text  = c.ShutdownBatteryThreshold.ToString();
+            RuntimeThreshBox.Text = c.ShutdownRuntimeMinutes.ToString();
+            ShutdownDelayBox.Text = c.ShutdownDelaySeconds.ToString();
 
-        bool isAuto = c.ShutdownMode.Equals("Auto", StringComparison.OrdinalIgnoreCase);
-        ManualRadio.IsChecked  = !isAuto;
-        AutoRadio.IsChecked    = isAuto;
-        SafetyMarginBox.Text   = c.SafetyMarginMinutes.ToString();
-        AutoPanel.Visibility        = isAuto ? Visibility.Visible : Visibility.Collapsed;
-        SetRuntimeThreshEnabled(!isAuto);
+            bool isAuto = c.ShutdownMode.Equals("Auto", StringComparison.OrdinalIgnoreCase);
+            ManualRadio.IsChecked  = !isAuto;
+            AutoRadio.IsChecked    = isAuto;
+            SafetyMarginBox.Text   = c.SafetyMarginMinutes.ToString();
+            AutoPanel.Visibility        = isAuto ? Visibility.Visible : Visibility.Collapsed;
+            SetRuntimeThreshEnabled(!isAuto);
+
+            _passwordEdited       = false;
+            _remotePasswordEdited = false;
+        }
+        finally { _populating = false; }
+    }
+
+    private void PasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (!_populating) _passwordEdited = true;
+    }
+
+    private void RemotePasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (!_populating) _remotePasswordEdited = true;
     }
 
     private void ServerRadio_Checked(object sender, RoutedEventArgs e)
@@ -155,13 +184,13 @@ public partial class SettingsWindow : Window
             UpsName                  = UpsNameBox.Text.Trim(),
             UpsDescription           = _original?.UpsDescription ?? "UPS",
             Username                 = UsernameBox.Text.Trim(),
-            Password                 = PasswordBox.Password,
+            Password                 = _passwordEdited ? PasswordBox.Password : null,
             Port                     = isServer  ? activePort : (_original?.Port ?? 3493),
             RemoteHost               = RemoteHostBox.Text.Trim(),
             RemotePort               = !isServer ? activePort : (_original?.RemotePort ?? 3493),
             RemoteUpsName            = RemoteUpsBox.Text.Trim(),
             RemoteUsername           = RemoteUsernameBox.Text.Trim(),
-            RemotePassword           = RemotePasswordBox.Password,
+            RemotePassword           = _remotePasswordEdited ? RemotePasswordBox.Password : null,
             ShutdownBatteryThreshold = charge,
             ShutdownRuntimeMinutes   = runtime,
             ShutdownDelaySeconds     = delay,

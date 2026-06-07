@@ -19,6 +19,12 @@ DisableProgramGroupPage=yes
 UninstallDisplayName=NutAgent
 UsedUserAreasWarning=no
 
+[Dirs]
+; appsettings.json holds plaintext NUT credentials — replace the inherited ACL (which
+; would otherwise grant BUILTIN\Users read access via Program Files' default DACL) so
+; only the service account (SYSTEM) and admins can read the install directory.
+Name: "{app}"; Permissions: system-full admins-full
+
 [Files]
 ; BeforeInstall on the first file handles stop/cleanup for upgrade installs
 Source: "..\NutAgent\bin\Release\net10.0-windows\win-x64\publish\ups-agent.exe"; \
@@ -47,7 +53,7 @@ Filename: "{sys}\sc.exe"; \
     Parameters: "start {#ServiceName}"; \
     Flags: runhidden; StatusMsg: "Starting service..."
 Filename: "{sys}\netsh.exe"; \
-    Parameters: "advfirewall firewall add rule name=""NutAgent NUT Server (TCP 3493)"" dir=in action=allow protocol=TCP localport=3493"; \
+    Parameters: "advfirewall firewall add rule name=""NutAgent NUT Server (TCP 3493)"" dir=in action=allow protocol=TCP localport=3493 profile=private,domain"; \
     Flags: runhidden; Check: IsServerMode; StatusMsg: "Adding firewall rule..."
 Filename: "{app}\ups-tray.exe"; \
     Description: "Launch NutAgent tray app now"; \
@@ -121,6 +127,16 @@ begin
   Sleep(500);
 end;
 
+function JsonEscape(const Value: String): String;
+var
+  Escaped: String;
+begin
+  Escaped := Value;
+  StringChangeEx(Escaped, '\', '\\', True);
+  StringChangeEx(Escaped, '"', '\"', True);
+  Result := Escaped;
+end;
+
 procedure PatchConfig;
 var
   Path, Content: String;
@@ -137,8 +153,10 @@ begin
     else
     begin
       StringChangeEx(Content, '"Mode": "Server"', '"Mode": "Client"', True);
+      // Escape the user-entered host before splicing it into the JSON — an unescaped
+      // quote or backslash would corrupt the file and prevent the service from starting.
       StringChangeEx(Content, '"RemoteHost": ""',
-          '"RemoteHost": "' + Trim(RemoteHostPage.Values[0]) + '"', True);
+          '"RemoteHost": "' + JsonEscape(Trim(RemoteHostPage.Values[0])) + '"', True);
     end;
 
     Lines.Text := Content;

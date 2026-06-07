@@ -16,13 +16,19 @@ public class TrayConfig
     public string UpsName                  { get; set; } = "ups";
     public string UpsDescription           { get; set; } = "UPS";
     public string Username                 { get; set; } = "";
-    public string Password                 { get; set; } = "";
+
+    // The service never echoes plaintext passwords back over IPC (see PipeServer.BuildGetConfig) —
+    // it only reports whether one is set, so the UI can show a placeholder. `Password` /
+    // `RemotePassword` are null unless the user actually typed a new value to send.
+    public bool    HasPassword              { get; set; }
+    public string? Password                 { get; set; }
     public int    Port                     { get; set; } = 3493;
     public string RemoteHost               { get; set; } = "";
     public int    RemotePort               { get; set; } = 3493;
     public string RemoteUpsName            { get; set; } = "ups";
     public string RemoteUsername           { get; set; } = "";
-    public string RemotePassword           { get; set; } = "";
+    public bool    HasRemotePassword        { get; set; }
+    public string? RemotePassword           { get; set; }
     public int    ShutdownBatteryThreshold { get; set; } = 20;
     public int    ShutdownRuntimeMinutes   { get; set; } = 5;
     public int    ShutdownDelaySeconds     { get; set; } = 60;

@@ -29,13 +29,11 @@ public static class PipeClient
             ["upsName"]                  = config.UpsName,
             ["upsDescription"]           = config.UpsDescription,
             ["username"]                 = config.Username,
-            ["password"]                 = config.Password,
             ["port"]                     = config.Port,
             ["remoteHost"]               = config.RemoteHost,
             ["remotePort"]               = config.RemotePort,
             ["remoteUpsName"]            = config.RemoteUpsName,
             ["remoteUsername"]           = config.RemoteUsername,
-            ["remotePassword"]           = config.RemotePassword,
             ["pollIntervalSeconds"]      = config.PollIntervalSeconds,
             ["shutdownBatteryThreshold"] = config.ShutdownBatteryThreshold,
             ["shutdownRuntimeMinutes"]   = config.ShutdownRuntimeMinutes,
@@ -43,6 +41,13 @@ public static class PipeClient
             ["shutdownMode"]             = config.ShutdownMode,
             ["safetyMarginMinutes"]      = config.SafetyMarginMinutes,
         };
+
+        // Only send a password when the user actually typed a new one — the service
+        // never reports the existing plaintext value back, so there's nothing to "leave
+        // unchanged" by re-sending; omitting the key tells it to keep what it has.
+        if (config.Password is not null)       payload["password"]       = config.Password;
+        if (config.RemotePassword is not null) payload["remotePassword"] = config.RemotePassword;
+
         return SendAsync<SetConfigResult>(payload, ct);
     }
 

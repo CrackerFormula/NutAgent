@@ -12,7 +12,10 @@ if (-not $isAdmin)
 {
     $ps5 = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
     $launchArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Mode $Mode -InstallTray:$($InstallTray.IsPresent)"
-    if ($RemoteHost) { $launchArgs += " -RemoteHost $RemoteHost" }
+    # Quote (and strip embedded quotes from) RemoteHost before splicing it into the
+    # argument string — Start-Process re-parses this as a single command line, so an
+    # unquoted value containing spaces or quotes would be mis-split into extra arguments.
+    if ($RemoteHost) { $launchArgs += ' -RemoteHost "' + $RemoteHost.Replace('"', '') + '"' }
     Start-Process $ps5 -ArgumentList $launchArgs -Verb RunAs -Wait
     exit
 }

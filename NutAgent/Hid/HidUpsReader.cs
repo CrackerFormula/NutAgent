@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using HidSharp;
 using HidSharp.Reports;
 using HidSharp.Reports.Input;
@@ -338,15 +339,32 @@ public sealed class HidUpsReader : IUpsReader
     {
         try
         {
-            return index switch
+            var value = index switch
             {
                 1 => device.GetManufacturer(),
                 2 => device.GetProductName(),
                 3 => device.GetSerialNumber(),
                 _ => ""
             };
+            return SanitizeForNutProtocol(value);
         }
         catch { return ""; }
+    }
+
+    // USB string descriptors come from the device itself — external input NutAgent
+    // doesn't control. They get interpolated into double-quoted NUT response fields
+    // (VAR <ups> <var> "<value>"); strip quotes/backslashes/control characters so a
+    // crafted descriptor (e.g. from a substituted USB device) can't break the protocol
+    // framing for connected clients (Home Assistant, Unraid, telnet, ...).
+    private static string SanitizeForNutProtocol(string value)
+    {
+        var sb = new StringBuilder(value.Length);
+        foreach (char c in value)
+        {
+            if (c == '"' || c == '\\' || char.IsControl(c)) continue;
+            sb.Append(c);
+        }
+        return sb.ToString();
     }
 
     public void Dispose()
