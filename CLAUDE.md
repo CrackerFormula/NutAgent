@@ -227,7 +227,8 @@ Transport: JSON lines, one request → one response.
 ← {"charge":85,"runtimeSeconds":1800,"status":"OL","load":42,"isConnected":true,"model":"Back-UPS 1500"}
 
 → {"type":"getConfig"}
-← { ...full AgentConfig as JSON... }
+← { ...config snapshot as JSON, incl. username/password (flattened from Users[0])
+     and remoteUsername/remotePassword for client mode... }
 
 → {"type":"setConfig","shutdownBatteryThreshold":15,"shutdownRuntimeMinutes":3}
 ← {"ok":true}
@@ -262,7 +263,9 @@ Mode:  ● Server  ○ Client
 [Server]                        [Client]
 UPS Name:  [ups      ]          Remote Host: [192.168.1.x]
 Port:      [3493     ]          Remote Port: [3493       ]
-                                Remote UPS:  [ups        ]
+Username:  [admin     ]         Remote UPS:  [ups        ]
+Password:  [••••••••  ]         Username:    [admin      ]
+                                Password:    [••••••••   ]
 
 ─────────────────────────────────────────
 Shutdown when:

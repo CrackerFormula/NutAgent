@@ -137,7 +137,32 @@ public sealed class PipeServer
         }, JsonOpts);
     }
 
-    private string BuildGetConfig() => JsonSerializer.Serialize(_config, JsonOpts);
+    private string BuildGetConfig()
+    {
+        // Flatten the primary local user (Users[0]) to username/password for the simple
+        // single-account UI in the tray Settings window — most installs have exactly one.
+        var user = _config.Users.FirstOrDefault();
+        return JsonSerializer.Serialize(new
+        {
+            mode                     = _config.Mode,
+            upsName                  = _config.UpsName,
+            upsDescription           = _config.UpsDescription,
+            username                 = user?.Username ?? "",
+            password                 = user?.Password ?? "",
+            port                     = _config.Port,
+            remoteHost               = _config.RemoteHost,
+            remotePort               = _config.RemotePort,
+            remoteUpsName            = _config.RemoteUpsName,
+            remoteUsername           = _config.RemoteUsername,
+            remotePassword           = _config.RemotePassword,
+            shutdownBatteryThreshold = _config.ShutdownBatteryThreshold,
+            shutdownRuntimeMinutes   = _config.ShutdownRuntimeMinutes,
+            shutdownDelaySeconds     = _config.ShutdownDelaySeconds,
+            shutdownMode             = _config.ShutdownMode,
+            safetyMarginMinutes      = _config.SafetyMarginMinutes,
+            pollIntervalSeconds      = _config.PollIntervalSeconds,
+        }, JsonOpts);
+    }
 
     private string ApplySetConfig(JsonElement el)
     {
@@ -157,11 +182,23 @@ public sealed class PipeServer
         if (el.TryGetProperty("upsName",        out var un) && un.GetString() is {} u) _config.UpsName        = u;
         if (el.TryGetProperty("upsDescription", out var ud) && ud.GetString() is {} d) _config.UpsDescription = d;
 
+        // Local NUT login (server mode) — update the primary user (Users[0]); create one if
+        // the list is empty. NutSession reads _config.Users live, effective immediately.
+        if (el.TryGetProperty("username", out var lu) && lu.GetString() is {} luser &&
+            el.TryGetProperty("password", out var lp) && lp.GetString() is {} lpass)
+        {
+            var primary = _config.Users.FirstOrDefault();
+            if (primary != null) { primary.Username = luser; primary.Password = lpass; }
+            else _config.Users.Add(new NutUser { Username = luser, Password = lpass });
+        }
+
         // Remote fields (client mode) — NutClient reads per-poll, effective on next poll.
-        if (el.TryGetProperty("remoteHost",          out var rh) && rh.GetString() is {} h) _config.RemoteHost    = h;
-        if (el.TryGetProperty("remotePort",          out var rp))                            _config.RemotePort    = rp.GetInt32();
-        if (el.TryGetProperty("remoteUpsName",       out var ru) && ru.GetString() is {} r)  _config.RemoteUpsName = r;
-        if (el.TryGetProperty("pollIntervalSeconds", out var pi))                            _config.PollIntervalSeconds = pi.GetInt32();
+        if (el.TryGetProperty("remoteHost",          out var rh) && rh.GetString() is {} h)  _config.RemoteHost     = h;
+        if (el.TryGetProperty("remotePort",          out var rp))                             _config.RemotePort     = rp.GetInt32();
+        if (el.TryGetProperty("remoteUpsName",       out var ru) && ru.GetString() is {} r)   _config.RemoteUpsName  = r;
+        if (el.TryGetProperty("remoteUsername",      out var rUser) && rUser.GetString() is {} rUserName) _config.RemoteUsername = rUserName;
+        if (el.TryGetProperty("remotePassword",      out var rPass) && rPass.GetString() is {} rPassword) _config.RemotePassword = rPassword;
+        if (el.TryGetProperty("pollIntervalSeconds", out var pi))                             _config.PollIntervalSeconds = pi.GetInt32();
 
         // Port change — NutServer rebinds on restart.
         if (el.TryGetProperty("port", out var port) && port.GetInt32() != _config.Port)
@@ -210,7 +247,19 @@ public sealed class PipeServer
             agent["RemoteHost"]               = _config.RemoteHost;
             agent["RemotePort"]               = _config.RemotePort;
             agent["RemoteUpsName"]            = _config.RemoteUpsName;
+            agent["RemoteUsername"]           = _config.RemoteUsername;
+            agent["RemotePassword"]           = _config.RemotePassword;
             agent["PollIntervalSeconds"]      = _config.PollIntervalSeconds;
+
+            var users = new JsonArray();
+            foreach (var nutUser in _config.Users)
+                users.Add(new JsonObject
+                {
+                    ["Username"] = nutUser.Username,
+                    ["Password"] = nutUser.Password,
+                    ["AllowSet"] = nutUser.AllowSet,
+                });
+            agent["Users"] = users;
 
             File.WriteAllText(path,
                 node!.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));

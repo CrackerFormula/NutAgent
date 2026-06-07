@@ -37,9 +37,13 @@ public partial class SettingsWindow : Window
 
         UpsNameBox.Text       = c.UpsName;
         PortBox.Text          = c.Port.ToString();
+        UsernameBox.Text      = c.Username;
+        PasswordBox.Password  = c.Password;
         RemoteHostBox.Text    = c.RemoteHost;
         RemotePortBox.Text    = c.RemotePort.ToString();
         RemoteUpsBox.Text     = c.RemoteUpsName;
+        RemoteUsernameBox.Text     = c.RemoteUsername;
+        RemotePasswordBox.Password = c.RemotePassword;
         ChargeThreshBox.Text  = c.ShutdownBatteryThreshold.ToString();
         RuntimeThreshBox.Text = c.ShutdownRuntimeMinutes.ToString();
         ShutdownDelayBox.Text = c.ShutdownDelaySeconds.ToString();
@@ -150,12 +154,14 @@ public partial class SettingsWindow : Window
             Mode                     = isServer ? "Server" : "Client",
             UpsName                  = UpsNameBox.Text.Trim(),
             UpsDescription           = _original?.UpsDescription ?? "UPS",
+            Username                 = UsernameBox.Text.Trim(),
+            Password                 = PasswordBox.Password,
             Port                     = isServer  ? activePort : (_original?.Port ?? 3493),
             RemoteHost               = RemoteHostBox.Text.Trim(),
             RemotePort               = !isServer ? activePort : (_original?.RemotePort ?? 3493),
             RemoteUpsName            = RemoteUpsBox.Text.Trim(),
-            RemoteUsername           = _original?.RemoteUsername ?? "",
-            RemotePassword           = _original?.RemotePassword ?? "",
+            RemoteUsername           = RemoteUsernameBox.Text.Trim(),
+            RemotePassword           = RemotePasswordBox.Password,
             ShutdownBatteryThreshold = charge,
             ShutdownRuntimeMinutes   = runtime,
             ShutdownDelaySeconds     = delay,

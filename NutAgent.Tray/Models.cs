@@ -15,6 +15,8 @@ public class TrayConfig
     public string Mode                     { get; set; } = "Server";
     public string UpsName                  { get; set; } = "ups";
     public string UpsDescription           { get; set; } = "UPS";
+    public string Username                 { get; set; } = "";
+    public string Password                 { get; set; } = "";
     public int    Port                     { get; set; } = 3493;
     public string RemoteHost               { get; set; } = "";
     public int    RemotePort               { get; set; } = 3493;

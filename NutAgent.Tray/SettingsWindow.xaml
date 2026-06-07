@@ -26,14 +26,24 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="UPS Name:"
                            VerticalAlignment="Center" Margin="0,0,0,6"/>
                 <TextBox   Grid.Row="0" Grid.Column="1" x:Name="UpsNameBox"
                            Margin="0,0,0,6"/>
                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Port:"
+                           VerticalAlignment="Center" Margin="0,0,0,6"/>
+                <TextBox   Grid.Row="1" Grid.Column="1" x:Name="PortBox"
+                           Margin="0,0,0,6"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Username:"
+                           VerticalAlignment="Center" Margin="0,0,0,6"/>
+                <TextBox   Grid.Row="2" Grid.Column="1" x:Name="UsernameBox"
+                           Margin="0,0,0,6"/>
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Password:"
                            VerticalAlignment="Center"/>
-                <TextBox   Grid.Row="1" Grid.Column="1" x:Name="PortBox"/>
+                <PasswordBox Grid.Row="3" Grid.Column="1" x:Name="PasswordBox"/>
             </Grid>
         </GroupBox>
 
@@ -49,6 +59,8 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Remote Host:"
                            VerticalAlignment="Center" Margin="0,0,0,6"/>
@@ -59,8 +71,16 @@
                 <TextBox   Grid.Row="1" Grid.Column="1" x:Name="RemotePortBox"
                            Margin="0,0,0,6"/>
                 <TextBlock Grid.Row="2" Grid.Column="0" Text="Remote UPS:"
+                           VerticalAlignment="Center" Margin="0,0,0,6"/>
+                <TextBox   Grid.Row="2" Grid.Column="1" x:Name="RemoteUpsBox"
+                           Margin="0,0,0,6"/>
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Username:"
+                           VerticalAlignment="Center" Margin="0,0,0,6"/>
+                <TextBox   Grid.Row="3" Grid.Column="1" x:Name="RemoteUsernameBox"
+                           Margin="0,0,0,6"/>
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Password:"
                            VerticalAlignment="Center"/>
-                <TextBox   Grid.Row="2" Grid.Column="1" x:Name="RemoteUpsBox"/>
+                <PasswordBox Grid.Row="4" Grid.Column="1" x:Name="RemotePasswordBox"/>
             </Grid>
         </GroupBox>
 
