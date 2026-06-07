@@ -209,7 +209,7 @@ NutAgent ships with a small tool for exactly this — **`HidDiag.exe`**, already
    HidDiag.exe
    ```
 2. Let it finish — it spends about 5 seconds capturing live data, so don't unplug the UPS mid-run
-3. Copy/paste the **entire** output. It prints the full list of usages, value ranges, and live readings your UPS sends — exactly what's needed to teach NutAgent to read it correctly
+3. It automatically saves a copy of everything it printed to a file on your **Desktop** (named something like `HidDiag-2026-06-07_183956.txt`) — just attach or paste that file when you report the issue
 
 If you can provide all five of these, fixing support for your device usually becomes a quick, mechanical change rather than a guessing game — that's exactly how Tripp Lite, APC, and CyberPower support were each added.
 

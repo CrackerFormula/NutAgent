@@ -1,9 +1,20 @@
 using System;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using HidSharp;
 using HidSharp.Reports;
 using HidSharp.Reports.Input;
+
+// Mirror everything to a timestamped file on the desktop too — so users can just
+// attach/paste a file instead of copying a long scrolling console window by hand.
+var dumpPath  = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                             $"HidDiag-{DateTime.Now:yyyy-MM-dd_HHmmss}.txt");
+var dumpFile  = new StreamWriter(dumpPath, append: false) { AutoFlush = true };
+Console.SetOut(new TeeWriter(Console.Out, dumpFile));
+
+Console.WriteLine($"Saving a copy of this output to: {dumpPath}");
+Console.WriteLine();
 
 var devices = DeviceList.Local.GetHidDevices()
     .Where(d =>
@@ -116,4 +127,20 @@ while (DateTime.UtcNow < deadline)
 }
 Console.WriteLine($"  ({reportCount} input reports received in 5s)");
 
+Console.WriteLine();
+Console.WriteLine($"Saved a copy of this output to: {dumpPath}");
+Console.WriteLine("Attach or paste that file when reporting a device-support issue.");
+dumpFile.Dispose();
+
 static string TryGet(Func<string> f) { try { return f(); } catch { return "(unavailable)"; } }
+
+// Writes everything to both the real console and a file at once, so Console.WriteLine
+// calls throughout this file transparently produce a saved copy with no extra plumbing.
+sealed class TeeWriter(TextWriter a, TextWriter b) : TextWriter
+{
+    public override Encoding Encoding => a.Encoding;
+    public override void Write(char value) { a.Write(value); b.Write(value); }
+    public override void Write(string? value) { a.Write(value); b.Write(value); }
+    public override void WriteLine(string? value) { a.WriteLine(value); b.WriteLine(value); }
+    public override void Flush() { a.Flush(); b.Flush(); }
+}
