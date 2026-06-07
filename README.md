@@ -15,7 +15,8 @@ The official Windows port of NUT requires manually swapping USB drivers with Zad
 - ⚡ **Automatic shutdown on low battery** — configurable charge % and/or runtime thresholds, with a grace period
 - 🧠 **"Auto" shutdown mode** — learns your UPS's actual discharge rate and times the shutdown dynamically instead of relying on a fixed threshold
 - 🌐 **Share one UPS across multiple PCs** — run in Client mode to have other machines watch a server's UPS over the network and shut themselves down too
-- 📦 **Single-file installer** — `NutAgent-Setup.exe` handles the service, firewall rule, and tray app in one pass
+- 🩺 **Built-in diagnostic tool** — `HidDiag.exe` ships with every install; one run dumps everything needed to add support for a new UPS model straight to a file on your Desktop
+- 📦 **Single-file installer** — `NutAgent-Setup.exe` handles the service, firewall rule, tray app, and diagnostic tool in one pass
 
 ## Tested UPS models
 
