@@ -166,10 +166,17 @@ Most settings (thresholds, login, UPS name, remote host) apply immediately. Chan
 
 NutAgent reads your UPS's status directly over USB using the standard **HID Power Device class** that virtually every consumer UPS implements — the same interface the official NUT Windows driver uses, just without needing Zadig. It then serves that data over a plain-text TCP protocol (the NUT protocol) that Home Assistant, Unraid, and other tools already know how to speak.
 
-Two machines can also be chained together: one runs in **Server** mode (UPS plugged in via USB, serving NUT on `:3493`), and another runs in **Client** mode, watching that server and shutting itself down when the server reports low battery — handy for protecting a second PC that shares the same UPS but has no free USB port for it.
+Two Windows machines can also be chained together: one runs in **Server** mode (UPS plugged in via USB, serving NUT on `:3493`), and another runs in **Client** mode, watching that server and shutting itself down right alongside it — handy for protecting a second PC that shares the same UPS but has no free USB port for it.
 
 ```
-UPS ──USB──▶ PC1 (Server)  ──NUT:3493──▶  PC2 (Client, shuts itself down too)
-                  │
-                  └─────────NUT:3493──▶  Home Assistant / Unraid (just monitoring)
+  UPS ──USB──▶  PC1 (Server)  ──NUT :3493──▶  PC2 (Client)
+                                              shares the UPS, shuts down with PC1
+```
+
+Separate from that shutdown chain, *anything* that speaks NUT — Home Assistant, Unraid's own native NUT server, or any other NUT client — can connect to any NUT server purely to keep an eye on it. A typical multi-UPS home setup ends up with Home Assistant as a single dashboard watching every UPS in the house, NutAgent or not:
+
+```
+  PC1     (NutAgent server, UPS A)  ─┐
+  PC3     (NutAgent server, UPS B)  ─┼──  NUT :3493  ──▶  Home Assistant
+  Unraid  (native NUT server, UPS D)─┘                    one dashboard, every UPS
 ```
