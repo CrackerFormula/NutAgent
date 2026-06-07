@@ -7,6 +7,12 @@ public class AgentConfig
     // Server mode
     public string UpsName { get; set; } = "ups";
     public string UpsDescription { get; set; } = "UPS";
+
+    // Nameplate ratings used to estimate ups.realpower / ups.power from ups.load when the
+    // device doesn't report wattage/VA directly over HID (common on budget UPS models).
+    // 0 = disabled — leave the variable absent rather than publish a fabricated value.
+    public int UpsNominalWatts { get; set; } = 0;
+    public int UpsNominalVA    { get; set; } = 0;
     public int Port { get; set; } = 3493;
     public List<NutUser> Users { get; set; } = new();
 

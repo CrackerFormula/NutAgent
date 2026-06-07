@@ -126,7 +126,7 @@ internal sealed class NutSession
         if (!upsName.Equals(_config.UpsName, StringComparison.OrdinalIgnoreCase))
             return "ERR UNKNOWN-UPS";
 
-        var vars = NutVariableMap.Build(_getState(), _config.ShutdownBatteryThreshold);
+        var vars = NutVariableMap.Build(_getState(), _config.ShutdownBatteryThreshold, _config.UpsNominalWatts, _config.UpsNominalVA);
         var lines = new System.Text.StringBuilder();
         lines.Append($"BEGIN LIST VAR {upsName}\n");
         foreach (var (k, v) in vars)
@@ -155,7 +155,7 @@ internal sealed class NutSession
         if (!upsName.Equals(_config.UpsName, StringComparison.OrdinalIgnoreCase))
             return "ERR UNKNOWN-UPS";
 
-        var vars = NutVariableMap.Build(_getState(), _config.ShutdownBatteryThreshold);
+        var vars = NutVariableMap.Build(_getState(), _config.ShutdownBatteryThreshold, _config.UpsNominalWatts, _config.UpsNominalVA);
         return vars.TryGetValue(varName, out var value)
             ? $"VAR {upsName} {varName} \"{value}\""
             : "ERR VAR-NOT-SUPPORTED";

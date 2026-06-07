@@ -182,6 +182,8 @@ Edit `C:\NutAgent\appsettings.json` — service requires restart after config ch
 |---|---|---|
 | `Agent.Mode` | `Server` | `Server` or `Client` |
 | `Agent.UpsName` | `ups` | NUT UPS name |
+| `Agent.UpsNominalWatts` | `0` | Nameplate rated watts (W) — estimates `ups.realpower` from `ups.load` when the device doesn't report it directly. `0` = disabled |
+| `Agent.UpsNominalVA` | `0` | Nameplate rated apparent power (VA) — estimates `ups.power` from `ups.load` the same way. `0` = disabled |
 | `Agent.Port` | `3493` | NUT protocol port |
 | `Agent.Users` | `[{admin/changeme}]` | Change password |
 | `Agent.RemoteHost` | `""` | Client mode: server IP |

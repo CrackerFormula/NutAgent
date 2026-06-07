@@ -1,3 +1,4 @@
+using System.Globalization;
 using NutAgent.Hid;
 
 namespace NutAgent.Nut;
@@ -9,10 +10,24 @@ public static class NutVariableMap
     private const string DriverName    = "NutAgent";
     private const string DriverVersion = "1.0.0";
 
-    public static IReadOnlyDictionary<string, string> Build(UpsState state, int shutdownBatteryThreshold = 20)
+    public static IReadOnlyDictionary<string, string> Build(UpsState state, int shutdownBatteryThreshold = 20,
+        int upsNominalWatts = 0, int upsNominalVA = 0)
     {
         // Start with everything the HID reader discovered
         var vars = new Dictionary<string, string>(state.Variables);
+
+        // Estimate ups.realpower / ups.power from ups.load when the device itself doesn't
+        // report wattage/VA over HID (common on budget UPS models — see HidUpsReader notes).
+        // The device's own reading always wins; this only fills the gap when absent.
+        if (vars.TryGetValue("ups.load", out var loadStr) &&
+            double.TryParse(loadStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var loadPercent))
+        {
+            if (upsNominalWatts > 0 && !vars.ContainsKey("ups.realpower"))
+                vars["ups.realpower"] = Math.Round(loadPercent / 100.0 * upsNominalWatts).ToString("F0", CultureInfo.InvariantCulture);
+
+            if (upsNominalVA > 0 && !vars.ContainsKey("ups.power"))
+                vars["ups.power"] = Math.Round(loadPercent / 100.0 * upsNominalVA).ToString("F0", CultureInfo.InvariantCulture);
+        }
 
         // Typed fields are always authoritative — override whatever HID may have put in Variables.
         // Inject LB into status if charge <= threshold; covers devices that don't send a HID LB flag.
