@@ -48,7 +48,7 @@ The installer is **upgrade-safe**: running it again on a machine that already ha
 Requires the [.NET 10 SDK](https://dot.net).
 
 ```powershell
-git clone https://git.coplin.ltd/CrackerFormula/NutAgent.git
+git clone https://github.com/CrackerFormula/NutAgent.git
 cd NutAgent
 
 # Build the service (and, optionally, the tray app)

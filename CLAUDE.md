@@ -125,7 +125,7 @@ Need a `10.x.x` entry. If missing, download from https://dot.net and install, th
 **2. Clone or pull the repo**
 ```powershell
 # First time:
-git clone https://git.coplin.ltd/CrackerFormula/NutAgent.git
+git clone https://github.com/CrackerFormula/NutAgent.git
 cd NutAgent
 
 # Already cloned:
