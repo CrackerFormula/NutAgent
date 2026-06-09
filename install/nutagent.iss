@@ -41,7 +41,7 @@ Source: "..\NutAgent\appsettings.json"; \
 
 [Run]
 Filename: "{sys}\sc.exe"; \
-    Parameters: "create {#ServiceName} binPath= ""{app}\ups-agent.exe"" start= auto DisplayName= ""{#ServiceDisplay}"""; \
+    Parameters: "create {#ServiceName} binPath= ""{app}\ups-agent.exe"" start= delayed-auto DisplayName= ""{#ServiceDisplay}"""; \
     Flags: runhidden; StatusMsg: "Registering service..."
 Filename: "{sys}\sc.exe"; \
     Parameters: "description {#ServiceName} ""{#ServiceDesc}"""; \
