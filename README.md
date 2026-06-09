@@ -85,7 +85,7 @@ Status should read `Running`. If it stopped immediately, check **Event Viewer �
 
 The easiest way to change settings is through the **tray app**: right-click the tray icon → **Settings…**. From there you can change the UPS name, NUT login, shutdown thresholds, and (for Client mode) the remote server's address and credentials — all without touching a config file or restarting the service.
 
-If you'd rather edit the file directly, it lives at `C:\NutAgent\appsettings.json`:
+If you'd rather edit the file directly, it lives at `C:\Program Files\NutAgent\appsettings.json`:
 
 | Setting | Default | What it does |
 |---|---|---|
@@ -205,7 +205,7 @@ Everything above tells us *that* something's wrong. This step is what tells us *
 
 NutAgent ships with a small tool for exactly this — **`HidDiag.exe`**, already sitting in your install folder, no extra downloads needed:
 
-1. With your UPS plugged in (and nothing else hogging it — close any manufacturer monitoring app first), open a command prompt in `C:\NutAgent\` and run:
+1. With your UPS plugged in (and nothing else hogging it — close any manufacturer monitoring app first), open a command prompt in `C:\Program Files\NutAgent\` and run:
    ```
    HidDiag.exe
    ```
